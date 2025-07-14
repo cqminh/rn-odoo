@@ -1,6 +1,6 @@
 {
   "name": "rn-odoo",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Easy to connecting React Native and Odoo",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -41,9 +41,13 @@
     "release": "release-it --only-version"
   },
   "keywords": [
+    "odoo",
+    "odoo-connector",
     "react-native",
-    "ios",
-    "android"
+    "react",
+    "json-rpc",
+    "mobile",
+    "odoo api"
   ],
   "repository": {
     "type": "git",
