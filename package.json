@@ -1,6 +1,6 @@
 {
   "name": "rn-odoo",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Easy to connecting React Native and Odoo",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -15,17 +15,6 @@
   "files": [
     "src",
     "lib",
-    "android",
-    "ios",
-    "cpp",
-    "*.podspec",
-    "react-native.config.js",
-    "!ios/build",
-    "!android/build",
-    "!android/gradle",
-    "!android/gradlew",
-    "!android/gradlew.bat",
-    "!android/local.properties",
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
@@ -37,7 +26,7 @@
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "clean": "del-cli lib",
-    "prepare": "bob build",
+    "prepublishOnly": "bob build",
     "release": "release-it --only-version"
   },
   "keywords": [
@@ -77,11 +66,12 @@
     "del-cli": "^5.1.0",
     "eslint": "^9.22.0",
     "eslint-config-prettier": "^10.1.1",
+    "eslint-plugin-jest": "^29.15.2",
     "eslint-plugin-prettier": "^5.2.3",
     "jest": "^29.7.0",
     "prettier": "^3.0.3",
-    "react": "19.0.0",
-    "react-native": "0.79.5",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
     "react-native-builder-bob": "^0.40.8",
     "release-it": "^17.10.0",
     "typescript": "^5.8.3"
@@ -94,12 +84,22 @@
     "example"
   ],
   "packageManager": "yarn@3.6.1",
+  "resolutions": {
+    "slash": "^3.0.0",
+    "chalk": "^4.1.2",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
+  },
   "jest": {
     "preset": "react-native",
     "modulePathIgnorePatterns": [
       "<rootDir>/example/node_modules",
-      "<rootDir>/lib/"
-    ]
+      "<rootDir>/lib/",
+      "<rootDir>/src/__tests__/__mocks__/"
+    ],
+    "moduleNameMapper": {
+      "^slash$": "<rootDir>/src/__tests__/__mocks__/slash.js"
+    }
   },
   "commitlint": {
     "extends": [
