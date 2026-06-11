@@ -1,49 +1,44 @@
-# Contributing
+# Contributing to rn-odoo
 
 Contributions are always welcome, no matter how large or small!
 
-We want this community to be friendly and respectful to each other. Please follow it in all your interactions with the project. Before contributing, please read the [code of conduct](./CODE_OF_CONDUCT.md).
+We want this community to be friendly and respectful. Please follow the [Code of Conduct](./CODE_OF_CONDUCT.md) in all your interactions with the project.
 
-## Development workflow
+## Development Setup
 
-This project is a monorepo managed using [Yarn workspaces](https://yarnpkg.com/features/workspaces). It contains the following packages:
+This project uses [Yarn](https://yarnpkg.com/) as its package manager. It contains:
 
 - The library package in the root directory.
 - An example app in the `example/` directory.
 
-To get started with the project, run `yarn` in the root directory to install the required dependencies for each package:
+To get started, run `yarn` in the root directory to install dependencies:
 
 ```sh
 yarn
 ```
 
-> Since the project relies on Yarn workspaces, you cannot use [`npm`](https://github.com/npm/cli) for development.
+> ⚠️ Since the project relies on Yarn workspaces, you cannot use `npm` for development.
 
-The [example app](/example/) demonstrates usage of the library. You need to run it to test any changes you make.
+The [example app](/example/) demonstrates usage of the library. It is configured to use the local version of the library, so any changes you make to the library's source code will be reflected in the example app. Changes to the library's JavaScript/TypeScript code will be reflected without a rebuild, but native code changes will require a rebuild of the example app.
 
-It is configured to use the local version of the library, so any changes you make to the library's source code will be reflected in the example app. Changes to the library's JavaScript code will be reflected in the example app without a rebuild, but native code changes will require a rebuild of the example app.
+### Common Commands
 
-You can use various commands from the root directory to work with the project.
+| Command | Description |
+|---------|-------------|
+| `yarn` | Install dependencies |
+| `yarn typecheck` | Type-check files with TypeScript |
+| `yarn lint` | Lint files with ESLint |
+| `yarn lint --fix` | Fix auto-fixable linting issues |
+| `yarn test` | Run unit tests with Jest |
+| `yarn clean` | Remove build output (`lib/`) |
+| `yarn prepublishOnly` | Build the library for publishing |
+| `yarn example start` | Start the Metro server for the example app |
+| `yarn example android` | Run the example app on Android |
+| `yarn example ios` | Run the example app on iOS |
+| `yarn example web` | Run the example app on Web |
+| `yarn release` | Publish a new version using `release-it` |
 
-To start the packager:
-
-```sh
-yarn example start
-```
-
-To run the example app on Android:
-
-```sh
-yarn example android
-```
-
-To run the example app on iOS:
-
-```sh
-yarn example ios
-```
-
-To confirm that the app is running with the new architecture, you can check the Metro logs for a message like this:
+To confirm that the app is running with the new architecture, check the Metro logs for a message like this:
 
 ```sh
 Running "RnOdooExample" with {"fabric":true,"initialProps":{"concurrentRoot":true},"rootTag":1}
@@ -51,82 +46,47 @@ Running "RnOdooExample" with {"fabric":true,"initialProps":{"concurrentRoot":tru
 
 Note the `"fabric":true` and `"concurrentRoot":true` properties.
 
-To run the example app on Web:
+### Commit Message Convention
 
-```sh
-yarn example web
-```
+We follow the [Conventional Commits](https://www.conventionalcommits.org/en) specification. Our pre-commit hooks (via [Lefthook](https://github.com/evilmartians/lefthook)) verify that your commit message matches this format.
 
-Make sure your code passes TypeScript and ESLint. Run the following to verify:
+| Type | Description |
+|------|-------------|
+| `fix` | Bug fixes, e.g. fix crash due to deprecated method |
+| `feat` | New features, e.g. add new method to the module |
+| `refactor` | Code refactoring, e.g. migrate from class components to hooks |
+| `docs` | Documentation changes, e.g. add usage example |
+| `test` | Adding or updating tests, e.g. add integration tests |
+| `chore` | Tooling changes, e.g. update CI config |
 
-```sh
-yarn typecheck
-yarn lint
-```
+### Linting and Testing
 
-To fix formatting errors, run the following:
+We use the following tools to maintain code quality:
 
-```sh
-yarn lint --fix
-```
-
-Remember to add tests for your change if possible. Run the unit tests by:
-
-```sh
-yarn test
-```
-
-### Commit message convention
-
-We follow the [conventional commits specification](https://www.conventionalcommits.org/en) for our commit messages:
-
-- `fix`: bug fixes, e.g. fix crash due to deprecated method.
-- `feat`: new features, e.g. add new method to the module.
-- `refactor`: code refactor, e.g. migrate from class components to hooks.
-- `docs`: changes into documentation, e.g. add usage example for the module..
-- `test`: adding or updating tests, e.g. add integration tests using detox.
-- `chore`: tooling changes, e.g. change CI config.
-
-Our pre-commit hooks verify that your commit message matches this format when committing.
-
-### Linting and tests
-
-[ESLint](https://eslint.org/), [Prettier](https://prettier.io/), [TypeScript](https://www.typescriptlang.org/)
-
-We use [TypeScript](https://www.typescriptlang.org/) for type checking, [ESLint](https://eslint.org/) with [Prettier](https://prettier.io/) for linting and formatting the code, and [Jest](https://jestjs.io/) for testing.
+- **[TypeScript](https://www.typescriptlang.org/)** — type checking
+- **[ESLint](https://eslint.org/)** with **[Prettier](https://prettier.io/)** — linting and formatting
+- **[Jest](https://jestjs.io/)** — unit testing
 
 Our pre-commit hooks verify that the linter and tests pass when committing.
 
 ### Publishing to npm
 
-We use [release-it](https://github.com/release-it/release-it) to make it easier to publish new versions. It handles common tasks like bumping version based on semver, creating tags and releases etc.
+We use [release-it](https://github.com/release-it/release-it) to automate publishing. It handles version bumping, git tags, and GitHub releases based on [Semantic Versioning](https://semver.org/).
 
-To publish new versions, run the following:
+To publish a new version, run:
 
 ```sh
 yarn release
 ```
 
-### Scripts
+### Sending a Pull Request
 
-The `package.json` file contains various scripts for common tasks:
+> **Working on your first pull request?** You can learn how from this free series: [How to Contribute to an Open Source Project on GitHub](https://app.egghead.io/playlists/how-to-contribute-to-an-open-source-project-on-github).
 
-- `yarn`: setup project by installing dependencies.
-- `yarn typecheck`: type-check files with TypeScript.
-- `yarn lint`: lint files with ESLint.
-- `yarn test`: run unit tests with Jest.
-- `yarn example start`: start the Metro server for the example app.
-- `yarn example android`: run the example app on Android.
-- `yarn example ios`: run the example app on iOS.
+When sending a pull request:
 
-### Sending a pull request
-
-> **Working on your first pull request?** You can learn how from this _free_ series: [How to Contribute to an Open Source Project on GitHub](https://app.egghead.io/playlists/how-to-contribute-to-an-open-source-project-on-github).
-
-When you're sending a pull request:
-
-- Prefer small pull requests focused on one change.
-- Verify that linters and tests are passing.
+- Prefer small, focused pull requests that address one change at a time.
+- Verify that linters and tests are passing (`yarn lint && yarn test`).
 - Review the documentation to make sure it looks good.
 - Follow the pull request template when opening a pull request.
 - For pull requests that change the API or implementation, discuss with maintainers first by opening an issue.
