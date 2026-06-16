@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.1] - 2026-06-16
+
+### Added
+
+- Configurable request `timeout` in `OdooConfig` (default: 30000ms, set `0` to disable)
+- Basic `retry` configuration for failed requests (`retry.count` and `retry.delay`)
+- `kwargs` support in `call_method` for clearer keyword argument passing
+- Request signals from interceptors are now preserved and combined with the internal timeout abort controller
+
+### Changed
+
+- All outgoing requests (`getDatabases`, `connect`, `connectWithSid`, `disconnect`, and dataset calls) now go through the unified `_fetch` wrapper, ensuring interceptors, timeout, retry, and consistent error handling apply everywhere
+- `call_method` legacy parameters (`domain`, `offset`, `limit`, `order`, `fields`) are deprecated in favor of `kwargs`; they remain functional for backward compatibility
+
+### Fixed
+
+- `connect` and `connectWithSid` now correctly extract session IDs from response headers when using the unified fetch wrapper
 
 ## [1.1.0] - 2026-06-10
 
@@ -39,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release with basic Odoo JSON-RPC connection support
 
-[Unreleased]: https://github.com/cqminh/rn-odoo/compare/v1.1.0...HEAD
+[1.1.1]: https://github.com/cqminh/rn-odoo/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/cqminh/rn-odoo/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/cqminh/rn-odoo/compare/v0.1.0...v1.0.1
 [0.1.0]: https://github.com/cqminh/rn-odoo/releases/tag/v0.1.0

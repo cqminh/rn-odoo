@@ -94,6 +94,12 @@ export interface OdooConfig {
    * Set to 0 to disable the built-in timeout.
    */
   timeout?: number;
+  /**
+   * Optional retry configuration for failed requests.
+   * @property count - Number of retry attempts after the initial failure.
+   * @property delay - Delay in milliseconds between retries. Defaults to 0.
+   */
+  retry?: { count: number; delay?: number };
 }
 
 /**
@@ -156,10 +162,27 @@ export interface SearchParams {
  */
 export interface CallMethodParams {
   args?: unknown[];
+  kwargs?: Record<string, unknown>;
+  /**
+   * @deprecated Use kwargs instead. These fields are kept for backward compatibility
+   * and will be merged into kwargs.
+   */
   domain?: unknown[];
+  /**
+   * @deprecated Use kwargs instead.
+   */
   offset?: number;
+  /**
+   * @deprecated Use kwargs instead.
+   */
   limit?: number;
+  /**
+   * @deprecated Use kwargs instead.
+   */
   order?: string;
+  /**
+   * @deprecated Use kwargs instead.
+   */
   fields?: string[];
 }
 
@@ -208,6 +231,7 @@ class Odoo {
   private context: Record<string, unknown> = {};
   private clearPasswordAfterConnect: boolean;
   private timeout: number;
+  private retry: { count: number; delay: number };
   private requestInterceptors: RequestInterceptor[] = [];
   private responseInterceptors: ResponseInterceptor[] = [];
   private eventListeners: Map<OdooEvent, Set<OdooEventCallback>> = new Map();
@@ -220,6 +244,10 @@ class Odoo {
     this.sid = config.sid;
     this.clearPasswordAfterConnect = config.clearPasswordAfterConnect ?? true;
     this.timeout = config.timeout ?? 30000;
+    this.retry = {
+      count: config.retry?.count ?? 0,
+      delay: config.retry?.delay ?? 0,
+    };
   }
 
   /**
@@ -576,7 +604,7 @@ class Odoo {
    * Calls a method on the specified model with the provided parameters.
    * @param model The name of the model to call the method on.
    * @param method The name of the method to call.
-   * @param params The parameters for the method call, including args, domain, offset, limit, order, and fields.
+   * @param params The parameters for the method call, including args and kwargs.
    * @param context Optional context to be used in the method call.
    * @returns A promise that resolves to the result of the method call or an error.
    */
@@ -586,17 +614,21 @@ class Odoo {
     params: CallMethodParams,
     context?: Record<string, unknown>
   ): Promise<OdooResult<T>> {
+    const legacyKwargs: Record<string, unknown> = {};
+    if (params.domain !== undefined) legacyKwargs.domain = params.domain;
+    if (params.offset !== undefined) legacyKwargs.offset = params.offset;
+    if (params.limit !== undefined) legacyKwargs.limit = params.limit;
+    if (params.order !== undefined) legacyKwargs.order = params.order;
+    if (params.fields !== undefined) legacyKwargs.fields = params.fields;
+
     return this._request('/web/dataset/call_kw', {
       model,
       method: method,
       args: params.args || [],
       kwargs: {
         context: { ...this.context, ...context },
-        domain: params.domain,
-        offset: params.offset,
-        limit: params.limit,
-        order: params.order,
-        fields: params.fields,
+        ...legacyKwargs,
+        ...params.kwargs,
       },
     });
   }
@@ -637,9 +669,45 @@ class Odoo {
 
   /**
    * Core fetch wrapper used by all outgoing requests.
-   * Applies interceptors, timeout, and unified error handling.
+   * Applies interceptors, timeout, retry logic, and unified error handling.
    */
   private async _fetch<T = unknown>(
+    path: string,
+    body: unknown,
+    extraHeaders?: Record<string, string>
+  ): Promise<OdooResult<T> & { headers?: Record<string, string> }> {
+    let lastError:
+      | (OdooResult<T> & { headers?: Record<string, string> })
+      | undefined;
+
+    for (let attempt = 0; attempt <= this.retry.count; attempt++) {
+      const result = await this._fetchOnce<T>(path, body, extraHeaders);
+
+      if (result.success) {
+        return result;
+      }
+
+      const isAbortError =
+        typeof result.error === 'string' && /aborted/i.test(result.error);
+
+      if (isAbortError || attempt === this.retry.count) {
+        return result;
+      }
+
+      lastError = result;
+
+      if (this.retry.delay > 0) {
+        await this._sleep(this.retry.delay);
+      }
+    }
+
+    return lastError!;
+  }
+
+  /**
+   * Performs a single fetch attempt.
+   */
+  private async _fetchOnce<T = unknown>(
     path: string,
     body: unknown,
     extraHeaders?: Record<string, string>
@@ -753,6 +821,13 @@ class Odoo {
       this._emit('error', errorResult.error);
       return errorResult;
     }
+  }
+
+  /**
+   * Waits for the specified number of milliseconds.
+   */
+  private _sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
