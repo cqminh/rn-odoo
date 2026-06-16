@@ -713,5 +713,61 @@ describe('Odoo', () => {
       expect(init.signal).toBeDefined();
       expect(init.signal instanceof AbortSignal).toBe(true);
     });
+
+    it('should use custom timeout from config', async () => {
+      mockFetch.mockImplementationOnce((__, init) => {
+        return new Promise((_resolve, reject) => {
+          const signal = init.signal as AbortSignal;
+          if (signal.aborted) {
+            reject(new Error('Aborted'));
+            return;
+          }
+          signal.addEventListener('abort', () => reject(new Error('Aborted')), {
+            once: true,
+          });
+        });
+      });
+
+      const odoo = new Odoo({
+        host: 'https://odoo.example.com',
+        sid: 'sid',
+        timeout: 100,
+      });
+      const result = await odoo.search_read('res.partner', {});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/aborted|timeout/i);
+    });
+
+    it('should preserve signal from request interceptor', async () => {
+      mockFetch.mockImplementationOnce((__, init) => {
+        return new Promise((_resolve, reject) => {
+          const signal = init.signal as AbortSignal;
+          if (signal.aborted) {
+            reject(new Error('Aborted'));
+            return;
+          }
+          signal.addEventListener('abort', () => reject(new Error('Aborted')), {
+            once: true,
+          });
+        });
+      });
+
+      const odoo = new Odoo({ host: 'https://odoo.example.com', sid: 'sid' });
+      const userController = new AbortController();
+      odoo.addRequestInterceptor((url, init) => {
+        return {
+          url,
+          init: { ...init, signal: userController.signal },
+        };
+      });
+
+      const promise = odoo.search_read('res.partner', {});
+      setTimeout(() => userController.abort(), 50);
+      const result = await promise;
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/aborted/i);
+    });
   });
 });

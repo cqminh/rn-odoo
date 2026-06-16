@@ -23,8 +23,17 @@ declare const fetch: (
 }>;
 
 declare class AbortController {
-  signal: unknown;
+  signal: AbortSignal;
   abort(): void;
+}
+
+interface AbortSignal {
+  aborted: boolean;
+  addEventListener(
+    event: string,
+    callback: () => void,
+    options?: { once?: boolean }
+  ): void;
 }
 
 declare function setTimeout(callback: () => void, ms: number): unknown;
@@ -34,7 +43,7 @@ type FetchInit = {
   method?: string;
   headers?: Record<string, string> | unknown;
   body?: string;
-  signal?: unknown;
+  signal?: AbortSignal;
 };
 
 /**
@@ -80,6 +89,11 @@ export interface OdooConfig {
    * Set to false if you need to reconnect later without re-entering the password.
    */
   clearPasswordAfterConnect?: boolean;
+  /**
+   * Request timeout in milliseconds. Defaults to 30000 (30 seconds).
+   * Set to 0 to disable the built-in timeout.
+   */
+  timeout?: number;
 }
 
 /**
@@ -193,6 +207,7 @@ class Odoo {
   sid?: string;
   private context: Record<string, unknown> = {};
   private clearPasswordAfterConnect: boolean;
+  private timeout: number;
   private requestInterceptors: RequestInterceptor[] = [];
   private responseInterceptors: ResponseInterceptor[] = [];
   private eventListeners: Map<OdooEvent, Set<OdooEventCallback>> = new Map();
@@ -204,6 +219,7 @@ class Odoo {
     this.password = config.password;
     this.sid = config.sid;
     this.clearPasswordAfterConnect = config.clearPasswordAfterConnect ?? true;
+    this.timeout = config.timeout ?? 30000;
   }
 
   /**
@@ -649,14 +665,29 @@ class Odoo {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-    if (!init.signal) {
-      init.signal = controller.signal;
+    let timeoutId: unknown | undefined;
+
+    if (this.timeout > 0) {
+      timeoutId = setTimeout(() => controller.abort(), this.timeout);
     }
+
+    if (init.signal) {
+      const userSignal = init.signal;
+      if (userSignal.aborted) {
+        controller.abort();
+      } else {
+        userSignal.addEventListener('abort', () => controller.abort(), {
+          once: true,
+        });
+      }
+    }
+    init.signal = controller.signal;
 
     try {
       const response = await fetch(url, init);
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
 
       const responseHeaders: Record<string, string> = {};
       if (typeof response.headers?.forEach === 'function') {
