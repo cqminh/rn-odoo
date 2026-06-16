@@ -454,7 +454,7 @@ describe('Odoo', () => {
 
       const odoo = new Odoo({ host: 'https://odoo.example.com', sid: 'sid' });
       odoo.addRequestInterceptor((url, init) => {
-        const headers = new Headers(init.headers);
+        const headers = new Headers(init.headers as unknown as Headers);
         headers.set('X-Custom-Header', 'test');
         return {
           url: url.replace('odoo', 'odoo2'),
@@ -466,7 +466,9 @@ describe('Odoo', () => {
 
       const [calledUrl, calledInit] = mockFetch.mock.calls[0];
       expect(calledUrl).toBe('https://odoo2.example.com/web/dataset/call_kw');
-      expect(calledInit.headers.get('X-Custom-Header')).toBe('test');
+      expect((calledInit.headers as Headers).get('X-Custom-Header')).toBe(
+        'test'
+      );
     });
 
     it('should allow response interceptor to modify result', async () => {
