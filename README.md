@@ -70,6 +70,8 @@ yarn add rn-odoo
 
 ## 🚀 Usage
 
+> ⚠️ **Important:** This version of `rn-odoo` uses the legacy Odoo JSON-RPC API (`/web/dataset/call_kw`) with session-based authentication. Starting from **Odoo 19**, Odoo introduced the new **External JSON-2 API** (`/json/2`) which uses API key authentication. We are actively developing **v2.0.0** to support the new API. See the [Odoo External API Documentation](https://www.odoo.com/documentation/master/developer/reference/external_api.html) for more details.
+
 > 💡 **Tip:** If you need help with data queries, refer to the [Odoo External API Documentation](https://www.odoo.com/documentation/master/developer/reference/external_api.html).
 
 ### Create an Odoo Instance
@@ -84,6 +86,8 @@ const odoo = new Odoo({
   password: 'your_password',      // Optional if using SID
   sid: 'your_session_id',         // Optional if using username/password
   clearPasswordAfterConnect: true, // Default: true. Set false to keep password for reconnect
+  timeout: 30000,                 // Request timeout in ms. Default: 30000. Set 0 to disable
+  retry: { count: 2, delay: 1000 }, // Optional retry config
 });
 ```
 
@@ -244,6 +248,7 @@ Call any custom method from your Odoo model.
 ```typescript
 const response = await odoo.call_method('sale.order', 'action_confirm', {
   args: [[1]], // Array of record IDs
+  kwargs: { context: { active_id: 1 } }, // Optional keyword arguments
 });
 if (response.success) {
   console.log('Method result:', response.data);
@@ -323,6 +328,20 @@ unsubError();
 | `on(event, callback)` | Subscribe to an event |
 | `off(event, callback)` | Unsubscribe from an event |
 
+### Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `host` | `string` | required | Odoo server URL |
+| `database` | `string` | — | Database name |
+| `username` | `string` | — | Username for authentication |
+| `password` | `string` | — | Password for authentication |
+| `sid` | `string` | — | Session ID for reconnection |
+| `clearPasswordAfterConnect` | `boolean` | `true` | Clear password after successful connect |
+| `timeout` | `number` | `30000` | Request timeout in ms. Set `0` to disable |
+| `retry` | `{ count, delay? }` | — | Retry failed requests |
+
+
 ## 📚 Documentation
 
 - [Odoo ORM API Reference](https://www.odoo.com/documentation/master/developer/reference/backend/orm.html)
@@ -331,7 +350,25 @@ unsubError();
 
 ---
 
-## 📝 Additional Notes
+## � Release
+
+Releases are published to npm automatically via GitHub Actions when a tag matching `v*` is pushed.
+
+To publish a new version:
+
+1. Update `package.json` version and `CHANGELOG.md`.
+2. Create and push a tag:
+   ```bash
+   git tag v1.1.1
+   git push origin v1.1.1
+   ```
+3. The [Release workflow](.github/workflows/release.yml) will run tests, build, and publish to npm.
+
+Make sure the `NPM_TOKEN` secret is configured in your repository settings.
+
+---
+
+## �📝 Additional Notes
 
 This library is a modified and enhanced version of [react-native-odoo-promise-based](https://www.npmjs.com/package/react-native-odoo-promise-based). Some methods and structures were reused and improved with:
 

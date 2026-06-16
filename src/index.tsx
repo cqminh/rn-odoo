@@ -1,13 +1,61 @@
 /**
+ * Minimal type declarations for fetch-related globals. React Native and DOM
+ * environments provide these at runtime, but we declare local types to keep
+ * TypeScript happy when DOM lib is not included in tsconfig.json.
+ */
+declare const fetch: (
+  url: string,
+  init?: {
+    method?: string;
+    headers?: Record<string, string> | unknown;
+    body?: string;
+    signal?: unknown;
+  }
+) => Promise<{
+  ok: boolean;
+  status: number;
+  statusText: string;
+  headers: {
+    forEach: (callback: (value: string, key: string) => void) => void;
+    get: (name: string) => string | null;
+  };
+  json: () => Promise<unknown>;
+}>;
+
+declare class AbortController {
+  signal: AbortSignal;
+  abort(): void;
+}
+
+interface AbortSignal {
+  aborted: boolean;
+  addEventListener(
+    event: string,
+    callback: () => void,
+    options?: { once?: boolean }
+  ): void;
+}
+
+declare function setTimeout(callback: () => void, ms: number): unknown;
+declare function clearTimeout(handle: unknown): void;
+
+type FetchInit = {
+  method?: string;
+  headers?: Record<string, string> | unknown;
+  body?: string;
+  signal?: AbortSignal;
+};
+
+/**
  * Interceptor for outgoing requests. Return modified request or undefined to proceed.
  */
 export type RequestInterceptor = (
   url: string,
-  init: RequestInit
+  init: FetchInit
 ) =>
-  | { url: string; init: RequestInit }
+  | { url: string; init: FetchInit }
   | void
-  | Promise<{ url: string; init: RequestInit } | void>;
+  | Promise<{ url: string; init: FetchInit } | void>;
 
 /**
  * Interceptor for incoming responses. Return modified result or undefined to proceed.
@@ -41,6 +89,17 @@ export interface OdooConfig {
    * Set to false if you need to reconnect later without re-entering the password.
    */
   clearPasswordAfterConnect?: boolean;
+  /**
+   * Request timeout in milliseconds. Defaults to 30000 (30 seconds).
+   * Set to 0 to disable the built-in timeout.
+   */
+  timeout?: number;
+  /**
+   * Optional retry configuration for failed requests.
+   * @property count - Number of retry attempts after the initial failure.
+   * @property delay - Delay in milliseconds between retries. Defaults to 0.
+   */
+  retry?: { count: number; delay?: number };
 }
 
 /**
@@ -103,10 +162,27 @@ export interface SearchParams {
  */
 export interface CallMethodParams {
   args?: unknown[];
+  kwargs?: Record<string, unknown>;
+  /**
+   * @deprecated Use kwargs instead. These fields are kept for backward compatibility
+   * and will be merged into kwargs.
+   */
   domain?: unknown[];
+  /**
+   * @deprecated Use kwargs instead.
+   */
   offset?: number;
+  /**
+   * @deprecated Use kwargs instead.
+   */
   limit?: number;
+  /**
+   * @deprecated Use kwargs instead.
+   */
   order?: string;
+  /**
+   * @deprecated Use kwargs instead.
+   */
   fields?: string[];
 }
 
@@ -154,6 +230,8 @@ class Odoo {
   sid?: string;
   private context: Record<string, unknown> = {};
   private clearPasswordAfterConnect: boolean;
+  private timeout: number;
+  private retry: { count: number; delay: number };
   private requestInterceptors: RequestInterceptor[] = [];
   private responseInterceptors: ResponseInterceptor[] = [];
   private eventListeners: Map<OdooEvent, Set<OdooEventCallback>> = new Map();
@@ -165,6 +243,11 @@ class Odoo {
     this.password = config.password;
     this.sid = config.sid;
     this.clearPasswordAfterConnect = config.clearPasswordAfterConnect ?? true;
+    this.timeout = config.timeout ?? 30000;
+    this.retry = {
+      count: config.retry?.count ?? 0,
+      delay: config.retry?.delay ?? 0,
+    };
   }
 
   /**
@@ -231,33 +314,7 @@ class Odoo {
    * @returns A promise that resolves to an object containing the success status and data or error.
    */
   async getDatabases(): Promise<OdooResult<string[]>> {
-    const url = `${this.host}/web/database/list`;
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
-      });
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${response.statusText}`,
-        };
-      }
-
-      const responseJson = (await response.json()) as OdooResponse<string[]>;
-
-      if (responseJson.error) {
-        return { success: false, error: responseJson.error };
-      }
-      return { success: true, data: responseJson.result };
-    } catch (error) {
-      return { success: false, error: this._formatError(error) };
-    }
+    return this._rawRequest<string[]>('/web/database/list', {});
   }
 
   /**
@@ -265,54 +322,31 @@ class Odoo {
    * @returns A promise that resolves to an object containing the success status and data or error.
    */
   async connect(): Promise<OdooResult<ConnectData>> {
-    const params = {
-      db: this.database,
-      login: this.username,
-      password: this.password,
-    };
-
-    const url = `${this.host}/web/session/authenticate`;
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ params }),
-      });
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${response.statusText}`,
-        };
+    const result = await this._rawRequest<ConnectData>(
+      '/web/session/authenticate',
+      {
+        db: this.database,
+        login: this.username,
+        password: this.password,
       }
+    );
 
-      const responseJson = (await response.json()) as OdooResponse<ConnectData>;
-      if (responseJson.error) {
-        return { success: false, error: responseJson.error };
-      }
-
-      this.sid = this._setCookieToSessionID(response.headers.get('set-cookie'));
-      this.context = responseJson.result?.user_context ?? {};
-      this.username = responseJson.result?.username;
+    if (result.success && result.data) {
+      this.sid = this._setCookieToSessionID(
+        result.headers?.['set-cookie'] ?? null
+      );
+      this.context = result.data.user_context ?? {};
+      this.username = result.data.username;
 
       if (this.clearPasswordAfterConnect) {
         this.password = undefined;
       }
 
-      this._emit('connect', responseJson.result);
-
-      return {
-        success: true,
-        data: responseJson.result,
-        sid: this.sid,
-      };
-    } catch (error) {
-      return { success: false, error: this._formatError(error) };
+      this._emit('connect', result.data);
+      return { ...result, sid: this.sid };
     }
+
+    return result;
   }
 
   /**
@@ -320,39 +354,24 @@ class Odoo {
    * @returns A promise that resolves to an object containing the success status and data or error.
    */
   async connectWithSid(): Promise<OdooResult<ConnectData>> {
-    const url = `${this.host}/web/session/get_session_info`;
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-Openerp-Session-Id': this.sid || '',
-        },
-        body: JSON.stringify({}),
-      });
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${response.statusText}`,
-        };
+    const result = await this._rawRequest<ConnectData>(
+      '/web/session/get_session_info',
+      {},
+      {
+        'X-Openerp-Session-Id': this.sid || '',
       }
+    );
 
-      const responseJson = (await response.json()) as OdooResponse<ConnectData>;
-      if (responseJson.error) {
-        return { success: false, error: responseJson.error };
-      }
-
-      this.sid = this._setCookieToSessionID(response.headers.get('set-cookie'));
-      this.context = responseJson.result?.user_context ?? {};
-      this.username = responseJson.result?.username;
-      this._emit('connect', responseJson.result);
-      return { success: true, data: responseJson.result };
-    } catch (error) {
-      return { success: false, error: this._formatError(error) };
+    if (result.success && result.data) {
+      this.sid = this._setCookieToSessionID(
+        result.headers?.['set-cookie'] ?? null
+      );
+      this.context = result.data.user_context ?? {};
+      this.username = result.data.username;
+      this._emit('connect', result.data);
     }
+
+    return result;
   }
 
   /**
@@ -410,38 +429,17 @@ class Odoo {
    * @returns A promise that resolves to an object containing the success status and message or error.
    */
   async disconnect(): Promise<OdooResult<null>> {
-    const url = `${this.host}/web/session/destroy`;
+    const result = await this._rawRequest<null>('/web/session/destroy', {});
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({}),
-      });
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${response.statusText}`,
-        };
-      }
-
-      const responseJson = (await response.json()) as OdooResponse<null>;
-      if (responseJson.error) {
-        return { success: false, error: responseJson.error };
-      }
-
+    if (result.success) {
       this.sid = undefined;
       this.context = {};
       this.username = undefined;
       this._emit('disconnect');
-      return { success: true, message: 'Disconnect successfully' };
-    } catch (error) {
-      return { success: false, error: this._formatError(error) };
+      return { ...result, message: 'Disconnect successfully' };
     }
+
+    return result;
   }
 
   /**
@@ -606,7 +604,7 @@ class Odoo {
    * Calls a method on the specified model with the provided parameters.
    * @param model The name of the model to call the method on.
    * @param method The name of the method to call.
-   * @param params The parameters for the method call, including args, domain, offset, limit, order, and fields.
+   * @param params The parameters for the method call, including args and kwargs.
    * @param context Optional context to be used in the method call.
    * @returns A promise that resolves to the result of the method call or an error.
    */
@@ -616,23 +614,27 @@ class Odoo {
     params: CallMethodParams,
     context?: Record<string, unknown>
   ): Promise<OdooResult<T>> {
+    const legacyKwargs: Record<string, unknown> = {};
+    if (params.domain !== undefined) legacyKwargs.domain = params.domain;
+    if (params.offset !== undefined) legacyKwargs.offset = params.offset;
+    if (params.limit !== undefined) legacyKwargs.limit = params.limit;
+    if (params.order !== undefined) legacyKwargs.order = params.order;
+    if (params.fields !== undefined) legacyKwargs.fields = params.fields;
+
     return this._request('/web/dataset/call_kw', {
       model,
       method: method,
       args: params.args || [],
       kwargs: {
         context: { ...this.context, ...context },
-        domain: params.domain,
-        offset: params.offset,
-        limit: params.limit,
-        order: params.order,
-        fields: params.fields,
+        ...legacyKwargs,
+        ...params.kwargs,
       },
     });
   }
 
   /**
-   * Makes a raw request to the Odoo API with the specified path and parameters.
+   * Makes a JSON-RPC request to the Odoo dataset endpoint.
    * @param path The API endpoint path.
    * @param params The request parameters.
    * @returns A promise that resolves to the response data or an error.
@@ -641,20 +643,85 @@ class Odoo {
     path: string,
     params: RequestParams
   ): Promise<OdooResult<T>> {
+    return this._fetch<T>(path, {
+      jsonrpc: '2.0',
+      id: Math.random().toString(36).slice(2) + Date.now().toString(36),
+      method: 'call',
+      params,
+    });
+  }
+
+  /**
+   * Makes a raw JSON request to a non JSON-RPC endpoint.
+   * @param path The API endpoint path.
+   * @param body The raw request body.
+   * @param extraHeaders Additional headers to include.
+   * @returns A promise that resolves to the response data or an error.
+   */
+  protected async _rawRequest<T = unknown>(
+    path: string,
+    body: Record<string, unknown>,
+    extraHeaders?: Record<string, string>
+  ): Promise<OdooResult<T> & { headers?: Record<string, string> }> {
+    const result = await this._fetch<T>(path, body, extraHeaders);
+    return result;
+  }
+
+  /**
+   * Core fetch wrapper used by all outgoing requests.
+   * Applies interceptors, timeout, retry logic, and unified error handling.
+   */
+  private async _fetch<T = unknown>(
+    path: string,
+    body: unknown,
+    extraHeaders?: Record<string, string>
+  ): Promise<OdooResult<T> & { headers?: Record<string, string> }> {
+    let lastError:
+      | (OdooResult<T> & { headers?: Record<string, string> })
+      | undefined;
+
+    for (let attempt = 0; attempt <= this.retry.count; attempt++) {
+      const result = await this._fetchOnce<T>(path, body, extraHeaders);
+
+      if (result.success) {
+        return result;
+      }
+
+      const isAbortError =
+        typeof result.error === 'string' && /aborted/i.test(result.error);
+
+      if (isAbortError || attempt === this.retry.count) {
+        return result;
+      }
+
+      lastError = result;
+
+      if (this.retry.delay > 0) {
+        await this._sleep(this.retry.delay);
+      }
+    }
+
+    return lastError!;
+  }
+
+  /**
+   * Performs a single fetch attempt.
+   */
+  private async _fetchOnce<T = unknown>(
+    path: string,
+    body: unknown,
+    extraHeaders?: Record<string, string>
+  ): Promise<OdooResult<T> & { headers?: Record<string, string> }> {
     let url = `${this.host}${path}`;
-    let init: RequestInit = {
+    let init: FetchInit = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'X-Openerp-Session-Id': this.sid || '',
+        ...extraHeaders,
       },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: Math.random().toString(36).slice(2) + Date.now().toString(36),
-        method: 'call',
-        params,
-      }),
+      body: JSON.stringify(body),
     };
 
     for (const interceptor of this.requestInterceptors) {
@@ -666,19 +733,51 @@ class Odoo {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-    if (!init.signal) {
-      init.signal = controller.signal;
+    let timeoutId: unknown | undefined;
+
+    if (this.timeout > 0) {
+      timeoutId = setTimeout(() => controller.abort(), this.timeout);
     }
+
+    if (init.signal) {
+      const userSignal = init.signal;
+      if (userSignal.aborted) {
+        controller.abort();
+      } else {
+        userSignal.addEventListener('abort', () => controller.abort(), {
+          once: true,
+        });
+      }
+    }
+    init.signal = controller.signal;
 
     try {
       const response = await fetch(url, init);
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+
+      const responseHeaders: Record<string, string> = {};
+      if (typeof response.headers?.forEach === 'function') {
+        response.headers.forEach((value: string, key: string) => {
+          responseHeaders[key] = value;
+        });
+      } else if (typeof response.headers?.get === 'function') {
+        const setCookie = response.headers.get('set-cookie');
+        if (setCookie) {
+          responseHeaders['set-cookie'] = setCookie;
+        }
+      } else if (response.headers) {
+        Object.assign(responseHeaders, response.headers);
+      }
 
       if (!response.ok) {
-        const errorResult: OdooResult<T> = {
+        const errorResult: OdooResult<T> & {
+          headers?: Record<string, string>;
+        } = {
           success: false,
           error: `HTTP ${response.status}: ${response.statusText}`,
+          headers: responseHeaders,
         };
         this._emit('error', errorResult.error);
         return errorResult;
@@ -686,32 +785,49 @@ class Odoo {
 
       const responseJson = (await response.json()) as OdooResponse<T>;
       if (responseJson.error) {
-        const errorResult: OdooResult<T> = {
+        const errorResult: OdooResult<T> & {
+          headers?: Record<string, string>;
+        } = {
           success: false,
           error: responseJson.error,
+          headers: responseHeaders,
         };
         this._emit('error', responseJson.error);
         return errorResult;
       }
 
-      let result: OdooResult<T> = { success: true, data: responseJson.result };
+      let result: OdooResult<T> & { headers?: Record<string, string> } = {
+        success: true,
+        data: responseJson.result,
+        headers: responseHeaders,
+      };
 
       for (const interceptor of this.responseInterceptors) {
         const modified = await interceptor(result);
         if (modified) {
-          result = modified as OdooResult<T>;
+          result = modified as OdooResult<T> & {
+            headers?: Record<string, string>;
+          };
         }
       }
 
       return result;
     } catch (error) {
-      const errorResult: OdooResult<T> = {
-        success: false,
-        error: this._formatError(error),
-      };
+      const errorResult: OdooResult<T> & { headers?: Record<string, string> } =
+        {
+          success: false,
+          error: this._formatError(error),
+        };
       this._emit('error', errorResult.error);
       return errorResult;
     }
+  }
+
+  /**
+   * Waits for the specified number of milliseconds.
+   */
+  private _sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

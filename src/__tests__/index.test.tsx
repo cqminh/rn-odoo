@@ -422,6 +422,43 @@ describe('Odoo', () => {
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ custom: 'value' });
     });
+
+    it('should pass kwargs to the method', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ result: 'ok' }),
+      });
+
+      const odoo = new Odoo({ host: 'https://odoo.example.com', sid: 'sid' });
+      await odoo.call_method('sale.order', 'action_confirm', {
+        args: [[1]],
+        kwargs: { context: { active_id: 1 } },
+      });
+
+      const [, init] = mockFetch.mock.calls[0];
+      const body = JSON.parse(init.body);
+      expect(body.params.kwargs.context).toEqual({ active_id: 1 });
+    });
+
+    it('should support legacy domain/offset/limit/order/fields params', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ result: [] }),
+      });
+
+      const odoo = new Odoo({ host: 'https://odoo.example.com', sid: 'sid' });
+      await odoo.call_method('res.partner', 'custom_search', {
+        domain: [['is_company', '=', true]],
+        limit: 10,
+        order: 'name ASC',
+      });
+
+      const [, init] = mockFetch.mock.calls[0];
+      const body = JSON.parse(init.body);
+      expect(body.params.kwargs.domain).toEqual([['is_company', '=', true]]);
+      expect(body.params.kwargs.limit).toBe(10);
+      expect(body.params.kwargs.order).toBe('name ASC');
+    });
   });
 
   describe('disconnect', () => {
@@ -454,7 +491,7 @@ describe('Odoo', () => {
 
       const odoo = new Odoo({ host: 'https://odoo.example.com', sid: 'sid' });
       odoo.addRequestInterceptor((url, init) => {
-        const headers = new Headers(init.headers);
+        const headers = new Headers(init.headers as unknown as Headers);
         headers.set('X-Custom-Header', 'test');
         return {
           url: url.replace('odoo', 'odoo2'),
@@ -466,7 +503,9 @@ describe('Odoo', () => {
 
       const [calledUrl, calledInit] = mockFetch.mock.calls[0];
       expect(calledUrl).toBe('https://odoo2.example.com/web/dataset/call_kw');
-      expect(calledInit.headers.get('X-Custom-Header')).toBe('test');
+      expect((calledInit.headers as Headers).get('X-Custom-Header')).toBe(
+        'test'
+      );
     });
 
     it('should allow response interceptor to modify result', async () => {
@@ -710,6 +749,126 @@ describe('Odoo', () => {
       const [, init] = mockFetch.mock.calls[0];
       expect(init.signal).toBeDefined();
       expect(init.signal instanceof AbortSignal).toBe(true);
+    });
+
+    it('should use custom timeout from config', async () => {
+      mockFetch.mockImplementationOnce((__, init) => {
+        return new Promise((_resolve, reject) => {
+          const signal = init.signal as AbortSignal;
+          if (signal.aborted) {
+            reject(new Error('Aborted'));
+            return;
+          }
+          signal.addEventListener('abort', () => reject(new Error('Aborted')), {
+            once: true,
+          });
+        });
+      });
+
+      const odoo = new Odoo({
+        host: 'https://odoo.example.com',
+        sid: 'sid',
+        timeout: 100,
+      });
+      const result = await odoo.search_read('res.partner', {});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/aborted|timeout/i);
+    });
+
+    it('should preserve signal from request interceptor', async () => {
+      mockFetch.mockImplementationOnce((__, init) => {
+        return new Promise((_resolve, reject) => {
+          const signal = init.signal as AbortSignal;
+          if (signal.aborted) {
+            reject(new Error('Aborted'));
+            return;
+          }
+          signal.addEventListener('abort', () => reject(new Error('Aborted')), {
+            once: true,
+          });
+        });
+      });
+
+      const odoo = new Odoo({ host: 'https://odoo.example.com', sid: 'sid' });
+      const userController = new AbortController();
+      odoo.addRequestInterceptor((url, init) => {
+        return {
+          url,
+          init: { ...init, signal: userController.signal },
+        };
+      });
+
+      const promise = odoo.search_read('res.partner', {});
+      setTimeout(() => userController.abort(), 50);
+      const result = await promise;
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/aborted/i);
+    });
+  });
+
+  describe('retry', () => {
+    it('should retry failed requests and succeed on retry', async () => {
+      mockFetch
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ result: [{ id: 1 }] }),
+        });
+
+      const odoo = new Odoo({
+        host: 'https://odoo.example.com',
+        sid: 'sid',
+        retry: { count: 2, delay: 10 },
+      });
+      const result = await odoo.search_read('res.partner', {});
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual([{ id: 1 }]);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return last error when all retries fail', async () => {
+      mockFetch.mockRejectedValue(new Error('Network error'));
+
+      const odoo = new Odoo({
+        host: 'https://odoo.example.com',
+        sid: 'sid',
+        retry: { count: 2, delay: 10 },
+      });
+      const result = await odoo.search_read('res.partner', {});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Network error');
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('should not retry aborted requests', async () => {
+      mockFetch.mockImplementationOnce((__, init) => {
+        return new Promise((_resolve, reject) => {
+          const signal = init.signal as AbortSignal;
+          if (signal.aborted) {
+            reject(new Error('Aborted'));
+            return;
+          }
+          signal.addEventListener('abort', () => reject(new Error('Aborted')), {
+            once: true,
+          });
+        });
+      });
+
+      const odoo = new Odoo({
+        host: 'https://odoo.example.com',
+        sid: 'sid',
+        timeout: 50,
+        retry: { count: 2, delay: 10 },
+      });
+      const result = await odoo.search_read('res.partner', {});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/aborted/i);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 });

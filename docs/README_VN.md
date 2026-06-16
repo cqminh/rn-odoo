@@ -70,6 +70,8 @@ yarn add rn-odoo
 
 ## 🚀 Cách sử dụng
 
+> ⚠️ **Lưu ý quan trọng:** Phiên bản này của `rn-odoo` đang sử dụng JSON-RPC API cũ (`/web/dataset/call_kw`) với xác thực dựa trên session. Từ **Odoo 19**, Odoo đã giới thiệu **External JSON-2 API** mới (`/json/2`) với xác thực bằng API key. Chúng tôi đang phát triển **v2.0.0** để hỗ trợ API mới. Xem thêm tại [Tài liệu API bên ngoài của Odoo](https://www.odoo.com/documentation/master/developer/reference/external_api.html).
+
 > 💡 **Gợi ý:** Nếu bạn cần hỗ trợ về cấu trúc truy vấn dữ liệu, hãy tham khảo [Tài liệu API bên ngoài của Odoo](https://www.odoo.com/documentation/master/developer/reference/external_api.html).
 
 ### Tạo instance Odoo
@@ -84,6 +86,8 @@ const odoo = new Odoo({
   password: 'your_password',      // Tùy chọn nếu dùng SID
   sid: 'your_session_id',         // Tùy chọn nếu dùng username/password
   clearPasswordAfterConnect: true, // Mặc định: true. Đặt false để giữ password cho lần kết nối sau
+  timeout: 30000,                 // Thời gian chờ request tính bằng ms. Mặc định: 30000. Đặt 0 để tắt
+  retry: { count: 2, delay: 1000 }, // Cấu hình retry tùy chọn
 });
 ```
 
@@ -244,6 +248,7 @@ Gọi bất kỳ hàm nào trong model Odoo của bạn.
 ```typescript
 const response = await odoo.call_method('sale.order', 'action_confirm', {
   args: [[1]], // Mảng các ID record
+  kwargs: { context: { active_id: 1 } }, // Các tham số keyword tùy chọn
 });
 if (response.success) {
   console.log('Kết quả hàm:', response.data);
@@ -323,6 +328,20 @@ unsubError();
 | `on(event, callback)` | Đăng ký lắng nghe sự kiện |
 | `off(event, callback)` | Huỷ đăng ký sự kiện |
 
+### Cấu hình
+
+| Tuỳ chọn | Kiểu | Mặc định | Mô tả |
+|----------|------|----------|-------|
+| `host` | `string` | bắt buộc | URL server Odoo |
+| `database` | `string` | — | Tên database |
+| `username` | `string` | — | Username để xác thực |
+| `password` | `string` | — | Password để xác thực |
+| `sid` | `string` | — | Session ID để kết nối lại |
+| `clearPasswordAfterConnect` | `boolean` | `true` | Xoá password sau khi kết nối thành công |
+| `timeout` | `number` | `30000` | Thời gian chờ request tính bằng ms. Đặt `0` để tắt |
+| `retry` | `{ count, delay? }` | — | Thử lại các request thất bại |
+
+
 ---
 
 ## 📚 Tài liệu
@@ -333,7 +352,25 @@ unsubError();
 
 ---
 
-## 📝 Ghi chú khác
+## � Release
+
+Các bản release được tự động publish lên npm qua GitHub Actions khi push tag có dạng `v*`.
+
+Để publish phiên bản mới:
+
+1. Cập nhật version trong `package.json` và `CHANGELOG.md`.
+2. Tạo và push tag:
+   ```bash
+   git tag v1.1.1
+   git push origin v1.1.1
+   ```
+3. [Release workflow](../.github/workflows/release.yml) sẽ chạy test, build và publish lên npm.
+
+Hãy đảm bảo secret `NPM_TOKEN` đã được cấu hình trong repository settings.
+
+---
+
+## �📝 Ghi chú khác
 
 Thư viện này là phiên bản chỉnh sửa và nâng cấp của [react-native-odoo-promise-based](https://www.npmjs.com/package/react-native-odoo-promise-based). Một số phương thức và cấu trúc đã được tái sử dụng và cải tiến với:
 
