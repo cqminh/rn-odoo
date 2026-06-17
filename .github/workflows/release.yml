@@ -1,4 +1,4 @@
-name: Release
+name: Publish Package
 
 on:
   push:
@@ -6,45 +6,23 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
   id-token: write
+  contents: read
 
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
-    environment: npm
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          registry-url: 'https://registry.npmjs.org/'
+          registry-url: 'https://registry.npmjs.org'
 
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      - name: Lint files
-        run: yarn lint
-
-      - name: Typecheck files
-        run: yarn typecheck
-
-      - name: Run unit tests
-        run: yarn test --maxWorkers=2
-
-      - name: Build package
-        run: yarn prepublishOnly
-
-      - name: Publish to npm with provenance
-        env:
-          NPM_TAG: ${{ contains(github.ref_name, '-') && 'next' || 'latest' }}
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if npm view rn-odoo@$VERSION version >/dev/null 2>&1; then
-            echo "Version $VERSION already published. Skipping."
-          else
-            npm publish --tag $NPM_TAG --access public --provenance
-          fi
+      - run: yarn install --immutable
+      - run: yarn lint
+      - run: yarn typecheck
+      - run: yarn test --maxWorkers=2
+      - run: yarn prepublishOnly
+      - run: npm publish --tag ${{ contains(github.ref_name, '-') && 'next' || 'latest' }} --access public --provenance
