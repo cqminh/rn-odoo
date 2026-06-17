@@ -350,25 +350,7 @@ unsubError();
 
 ---
 
-## � Release
-
-Releases are published to npm automatically via GitHub Actions when a tag matching `v*` is pushed.
-
-To publish a new version:
-
-1. Update `package.json` version and `CHANGELOG.md`.
-2. Create and push a tag:
-   ```bash
-   git tag v1.1.1
-   git push origin v1.1.1
-   ```
-3. The [Release workflow](.github/workflows/release.yml) will run tests, build, and publish to npm.
-
-Make sure the `NPM_TOKEN` secret is configured in your repository settings.
-
----
-
-## �📝 Additional Notes
+## 📝 Additional Notes
 
 This library is a modified and enhanced version of [react-native-odoo-promise-based](https://www.npmjs.com/package/react-native-odoo-promise-based). Some methods and structures were reused and improved with:
 

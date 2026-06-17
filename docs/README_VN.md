@@ -352,25 +352,7 @@ unsubError();
 
 ---
 
-## � Release
-
-Các bản release được tự động publish lên npm qua GitHub Actions khi push tag có dạng `v*`.
-
-Để publish phiên bản mới:
-
-1. Cập nhật version trong `package.json` và `CHANGELOG.md`.
-2. Tạo và push tag:
-   ```bash
-   git tag v1.1.1
-   git push origin v1.1.1
-   ```
-3. [Release workflow](../.github/workflows/release.yml) sẽ chạy test, build và publish lên npm.
-
-Hãy đảm bảo secret `NPM_TOKEN` đã được cấu hình trong repository settings.
-
----
-
-## �📝 Ghi chú khác
+## 📝 Ghi chú khác
 
 Thư viện này là phiên bản chỉnh sửa và nâng cấp của [react-native-odoo-promise-based](https://www.npmjs.com/package/react-native-odoo-promise-based). Một số phương thức và cấu trúc đã được tái sử dụng và cải tiến với:
 
