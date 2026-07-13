@@ -663,7 +663,16 @@ class Odoo {
     body: Record<string, unknown>,
     extraHeaders?: Record<string, string>
   ): Promise<OdooResult<T> & { headers?: Record<string, string> }> {
-    const result = await this._fetch<T>(path, body, extraHeaders);
+    const result = await this._fetch<T>(
+      path,
+      {
+        jsonrpc: '2.0',
+        id: Math.random().toString(36).slice(2) + Date.now().toString(36),
+        method: 'call',
+        params: body,
+      },
+      extraHeaders
+    );
     return result;
   }
 

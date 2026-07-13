@@ -21,11 +21,12 @@
     "!**/.*"
   ],
   "scripts": {
-    "example": "yarn workspace rn-odoo-example",
+    "example": "yarn workspace example",
     "test": "jest",
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "clean": "del-cli lib",
+    "prepare": "bob build",
     "prepublishOnly": "bob build",
     "release": "release-it --only-version"
   },
