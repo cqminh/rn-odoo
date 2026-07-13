@@ -22,6 +22,8 @@ jobs:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
 
+      - run: npm install -g npm@latest
+
       - run: yarn install --immutable
 
       - run: yarn prepublishOnly
