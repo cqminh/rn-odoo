@@ -21,6 +21,10 @@
 
 ---
 
+> 🚧 **Đây là nhánh `next` (v2 alpha).** Có thể sẽ còn thay đổi phá vỡ tương thích (breaking changes) trước khi ra bản `2.0.0` chính thức — cài bằng `npm install rn-odoo@next`. Nếu bạn muốn góp ý hay cần cải thiện gì, hãy [tạo issue trên GitHub](https://github.com/cqminh/rn-odoo/issues/new) hoặc gửi email tới [cqminh.it@gmail.com](mailto:cqminh.it@gmail.com).
+
+---
+
 ## 📋 Mục lục
 
 - [Tính năng](#tính-năng)
@@ -61,9 +65,9 @@
 ## 📦 Cài đặt
 
 ```bash
-npm install rn-odoo
+npm install rn-odoo@next
 # hoặc
-yarn add rn-odoo
+yarn add rn-odoo@next
 ```
 
 > ⚠️ **Lưu ý quan trọng:**

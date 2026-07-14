@@ -21,6 +21,10 @@
 
 ---
 
+> 🚧 **This is the `next` (v2 alpha) line.** Breaking changes are expected before the stable `2.0.0` release — install with `npm install rn-odoo@next`. If you'd like something improved, [open a GitHub issue](https://github.com/cqminh/rn-odoo/issues/new) or email [cqminh.it@gmail.com](mailto:cqminh.it@gmail.com).
+
+---
+
 ## 📋 Table of Contents
 
 - [Features](#features)
@@ -61,9 +65,9 @@
 ## 📦 Installation
 
 ```bash
-npm install rn-odoo
+npm install rn-odoo@next
 # or
-yarn add rn-odoo
+yarn add rn-odoo@next
 ```
 
 > ⚠️ **Breaking change:**
