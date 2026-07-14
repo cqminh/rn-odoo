@@ -1,51 +1,82 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
   ScrollView,
+  View,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import Odoo from 'rn-odoo';
 
+const DEFAULT_HOST =
+  process.env.EXPO_PUBLIC_ODOO_HOST ?? 'https://demo.odoo.com';
+const DEFAULT_DATABASE = process.env.EXPO_PUBLIC_ODOO_DATABASE ?? '';
+const DEFAULT_USERNAME = process.env.EXPO_PUBLIC_ODOO_USERNAME ?? '';
+const DEFAULT_PASSWORD = process.env.EXPO_PUBLIC_ODOO_PASSWORD ?? '';
+
 export default function OdooScreen() {
-  const [host, setHost] = useState('https://demo.odoo.com');
-  const [database, setDatabase] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [host, setHost] = useState(DEFAULT_HOST);
+  const [database, setDatabase] = useState(DEFAULT_DATABASE);
+  const [username, setUsername] = useState(DEFAULT_USERNAME);
+  const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const log = (msg: string) =>
-    setResult((prev) => (prev ? prev + '\n' : '') + msg);
+  // A single, shared instance so a session started by Connect can be reused
+  // by Connect with SID, Disconnect, and every data call below.
+  const odooRef = useRef<Odoo | null>(null);
 
-  const handleGetDatabases = async () => {
-    setLoading(true);
+  const log = (msg: string) => {
+    if (msg.startsWith('❌')) console.error('[rn-odoo]', msg);
+    else console.log('[rn-odoo]', msg);
+    setResult((prev) => (prev ? prev + '\n' : '') + msg);
+  };
+
+  const run = async (
+    label: string,
+    fn: (odoo: Odoo) => Promise<void>,
+    { requireSession = false }: { requireSession?: boolean } = {}
+  ) => {
     setResult('');
+    log(`▶️ ${label}`);
+
+    if (requireSession && !odooRef.current?.sid) {
+      log('❌ Connect first — no active session.');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const odoo = new Odoo({ host });
-      log('📡 Fetching databases...');
-      const res = await odoo.getDatabases();
-      if (res.success) {
-        log(`✅ Databases: ${JSON.stringify(res.data)}`);
-      } else {
-        log(`❌ Error: ${JSON.stringify(res.error)}`);
-      }
+      const odoo = odooRef.current ?? new Odoo({ host, database });
+      await fn(odoo);
     } catch (err) {
+      console.error('[rn-odoo] exception in', label, err);
       log(`❌ Exception: ${err}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleConnect = async () => {
-    setLoading(true);
-    setResult('');
-    try {
-      const odoo = new Odoo({ host, database, username, password });
-      log('🔐 Connecting...');
-      const res = await odoo.connect();
+  const handleGetDatabases = () =>
+    run('Get Databases', async () => {
+      const odoo = new Odoo({ host });
+      const res = await odoo.getDatabases();
+      if (res.success) log(`✅ Databases: ${JSON.stringify(res.data)}`);
+      else log(`❌ Error: ${JSON.stringify(res.error)}`);
+    });
+
+  const handleConnect = () =>
+    run('Connect', async () => {
+      odooRef.current = new Odoo({
+        host,
+        database,
+        username,
+        password,
+        clearPasswordAfterConnect: false,
+      });
+      const res = await odooRef.current.connect();
       if (res.success) {
         log(`✅ Connected!`);
         log(`   UID: ${res.data?.uid}`);
@@ -54,52 +85,158 @@ export default function OdooScreen() {
       } else {
         log(`❌ Error: ${JSON.stringify(res.error)}`);
       }
-    } catch (err) {
-      log(`❌ Exception: ${err}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+    });
 
-  const handleSearchRead = async () => {
-    setLoading(true);
-    setResult('');
-    try {
-      const odoo = new Odoo({ host, database, username, password });
-      log('🔐 Connecting...');
-      const connectRes = await odoo.connect();
-      if (!connectRes.success) {
-        log(`❌ Connect failed: ${JSON.stringify(connectRes.error)}`);
-        return;
-      }
-      log(`✅ Connected! Searching res.partner...`);
-      const searchRes = await odoo.search_read('res.partner', {
-        domain: [],
-        fields: ['name', 'email'],
-        limit: 5,
-      });
-      if (searchRes.success) {
-        log(
-          `✅ Found ${(searchRes.data as Record<string, unknown>[])?.length ?? 0} records`
+  const handleConnectWithSid = () =>
+    run(
+      'Connect with SID (reuse session)',
+      async (odoo) => {
+        const res = await odoo.connectWithSid();
+        if (res.success) log(`✅ Reconnected: ${JSON.stringify(res.data)}`);
+        else log(`❌ Error: ${JSON.stringify(res.error)}`);
+      },
+      { requireSession: true }
+    );
+
+  const handleGetContext = () =>
+    run(
+      'Get Context',
+      async (odoo) => {
+        const context = odoo.getContext();
+        log(`✅ Context: ${JSON.stringify(context)}`);
+      },
+      { requireSession: true }
+    );
+
+  const handleDisconnect = () =>
+    run(
+      'Disconnect',
+      async (odoo) => {
+        const res = await odoo.disconnect();
+        if (res.success) log(`✅ ${res.message}`);
+        else log(`❌ Error: ${JSON.stringify(res.error)}`);
+      },
+      { requireSession: true }
+    );
+
+  const handleSearch = () =>
+    run(
+      'Search res.partner (IDs)',
+      async (odoo) => {
+        const res = await odoo.search('res.partner', {
+          domain: [['is_company', '=', true]],
+          limit: 5,
+        });
+        if (res.success) log(`✅ IDs: ${JSON.stringify(res.data)}`);
+        else log(`❌ Error: ${JSON.stringify(res.error)}`);
+      },
+      { requireSession: true }
+    );
+
+  const handleRead = () =>
+    run(
+      'Read res.partner [1]',
+      async (odoo) => {
+        const res = await odoo.read('res.partner', [1], ['name', 'email']);
+        if (res.success) log(`✅ Records: ${JSON.stringify(res.data)}`);
+        else log(`❌ Error: ${JSON.stringify(res.error)}`);
+      },
+      { requireSession: true }
+    );
+
+  const handleSearchRead = () =>
+    run(
+      'Search Read res.partner (Top 5)',
+      async (odoo) => {
+        const res = await odoo.search_read('res.partner', {
+          domain: [],
+          fields: ['name', 'email'],
+          limit: 5,
+        });
+        if (res.success) {
+          log(`✅ Found ${res.data?.length ?? 0} records`);
+          log(JSON.stringify(res.data, null, 2));
+        } else {
+          log(`❌ Error: ${JSON.stringify(res.error)}`);
+        }
+      },
+      { requireSession: true }
+    );
+
+  const handleSearchCount = () =>
+    run(
+      'Search Count',
+      async (odoo) => {
+        const res = await odoo.search_count('res.partner', []);
+        if (res.success) log(`✅ Count: ${res.data}`);
+        else log(`❌ Error: ${JSON.stringify(res.error)}`);
+      },
+      { requireSession: true }
+    );
+
+  const handleSearchCountWithLimit = () =>
+    run(
+      'Search Count (limit: 1)',
+      async (odoo) => {
+        const res = await odoo.search_count(
+          'res.partner',
+          [['is_company', '=', true]],
+          { active_test: true }
         );
-        log(JSON.stringify(searchRes.data, null, 2));
-      } else {
-        log(`❌ Search error: ${JSON.stringify(searchRes.error)}`);
-      }
-    } catch (err) {
-      log(`❌ Exception: ${err}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+        if (res.success) log(`✅ Count: ${res.data}`);
+        else log(`❌ Error: ${JSON.stringify(res.error)}`);
+      },
+      { requireSession: true }
+    );
+
+  const handleFieldsGet = () =>
+    run(
+      'Fields Get res.partner',
+      async (odoo) => {
+        const res = await odoo.fields_get('res.partner', {
+          fields: ['name', 'email'],
+          attributes: ['type', 'string'],
+        });
+        if (res.success) log(`✅ Fields: ${JSON.stringify(res.data, null, 2)}`);
+        else log(`❌ Error: ${JSON.stringify(res.error)}`);
+      },
+      { requireSession: true }
+    );
+
+  const handleReadGroup = () =>
+    run(
+      'Read Group res.partner',
+      async (odoo) => {
+        const res = await odoo.read_group('res.partner', {
+          domain: [],
+          fields: ['country_id'],
+          groupby: ['country_id'],
+        });
+        if (res.success) log(`✅ Groups: ${JSON.stringify(res.data, null, 2)}`);
+        else log(`❌ Error: ${JSON.stringify(res.error)}`);
+      },
+      { requireSession: true }
+    );
+
+  const handleCallMethod = () =>
+    run(
+      'Call Custom Method (name_search)',
+      async (odoo) => {
+        const res = await odoo.call_method('res.partner', 'name_search', {
+          kwargs: { name: '', domain: [], limit: 5 },
+        });
+        if (res.success) log(`✅ Result: ${JSON.stringify(res.data)}`);
+        else log(`❌ Error: ${JSON.stringify(res.error)}`);
+      },
+      { requireSession: true }
+    );
 
   return (
     <ScrollView style={styles.container}>
       <ThemedView style={styles.hero}>
         <ThemedText type="title">rn-odoo</ThemedText>
         <ThemedText style={styles.subtitle}>
-          A lightweight React Native library for connecting to Odoo JSON-RPC &
-          XML-RPC APIs
+          Example app for the legacy Odoo JSON-RPC client (v1)
         </ThemedText>
       </ThemedView>
 
@@ -149,6 +286,7 @@ export default function OdooScreen() {
       </ThemedView>
 
       <ThemedView style={styles.section}>
+        <ThemedText type="defaultSemiBold">Server Info</ThemedText>
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleGetDatabases}
@@ -156,29 +294,167 @@ export default function OdooScreen() {
         >
           <ThemedText style={styles.buttonText}>Get Databases</ThemedText>
         </TouchableOpacity>
+      </ThemedView>
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleConnect}
-          disabled={loading}
-        >
-          <ThemedText style={styles.buttonText}>Connect</ThemedText>
-        </TouchableOpacity>
+      <ThemedView style={styles.section}>
+        <ThemedText type="defaultSemiBold">Auth & Session</ThemedText>
+        <View style={styles.row}>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.buttonHalf,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleConnect}
+            disabled={loading}
+          >
+            <ThemedText style={styles.buttonText}>Connect</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.buttonHalf,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleConnectWithSid}
+            disabled={loading}
+          >
+            <ThemedText style={styles.buttonText}>Connect with SID</ThemedText>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.row}>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.buttonHalf,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleGetContext}
+            disabled={loading}
+          >
+            <ThemedText style={styles.buttonText}>Get Context</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.buttonHalf,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleDisconnect}
+            disabled={loading}
+          >
+            <ThemedText style={styles.buttonText}>Disconnect</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
 
+      <ThemedView style={styles.section}>
+        <ThemedText type="defaultSemiBold">Search & Read</ThemedText>
+        <View style={styles.row}>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.buttonHalf,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleSearch}
+            disabled={loading}
+          >
+            <ThemedText style={styles.buttonText}>Search (IDs)</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.buttonHalf,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleRead}
+            disabled={loading}
+          >
+            <ThemedText style={styles.buttonText}>Read [1]</ThemedText>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleSearchRead}
           disabled={loading}
         >
+          <ThemedText style={styles.buttonText}>Search Read (Top 5)</ThemedText>
+        </TouchableOpacity>
+        <View style={styles.row}>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.buttonHalf,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleSearchCount}
+            disabled={loading}
+          >
+            <ThemedText style={styles.buttonText}>Count All</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.buttonHalf,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleSearchCountWithLimit}
+            disabled={loading}
+          >
+            <ThemedText style={styles.buttonText}>Count (companies)</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
+
+      <ThemedView style={styles.section}>
+        <ThemedText type="defaultSemiBold">Metadata & Custom</ThemedText>
+        <View style={styles.row}>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.buttonHalf,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleFieldsGet}
+            disabled={loading}
+          >
+            <ThemedText style={styles.buttonText}>Fields Get</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.buttonHalf,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleReadGroup}
+            disabled={loading}
+          >
+            <ThemedText style={styles.buttonText}>Read Group</ThemedText>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleCallMethod}
+          disabled={loading}
+        >
           <ThemedText style={styles.buttonText}>
-            Search Partners (Top 5)
+            Call Method (name_search)
           </ThemedText>
         </TouchableOpacity>
       </ThemedView>
 
       {result ? (
         <ThemedView style={styles.section}>
-          <ThemedText type="defaultSemiBold">Result:</ThemedText>
+          <View style={styles.resultHeader}>
+            <ThemedText type="defaultSemiBold">Result</ThemedText>
+            <TouchableOpacity
+              style={styles.clearButton}
+              onPress={() => setResult('')}
+            >
+              <ThemedText style={styles.clearButtonText}>Clear</ThemedText>
+            </TouchableOpacity>
+          </View>
           <ThemedView style={styles.resultBox}>
             <ThemedText style={styles.resultText}>{result}</ThemedText>
           </ThemedView>
@@ -215,6 +491,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9f9f9',
     color: '#333',
   },
+  row: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   button: {
     backgroundColor: '#0a7ea4',
     borderRadius: 8,
@@ -222,13 +502,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  buttonHalf: {
+    flex: 1,
+  },
   buttonDisabled: {
     opacity: 0.5,
   },
   buttonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 16,
+    fontSize: 14,
+  },
+  resultHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  clearButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#0a7ea4',
+  },
+  clearButtonText: {
+    color: '#0a7ea4',
+    fontSize: 13,
+    fontWeight: '600',
   },
   resultBox: {
     backgroundColor: '#1a1a2e',
