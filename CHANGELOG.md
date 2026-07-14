@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-07-14
+
+### Changed
+
+- README (EN & VN) now points to the `rn-odoo@next` alpha line for the new Odoo JSON-2 API client, with links to the npm listing and the `next` branch
+- Reworked the example app to exercise the full v1 session flow (Connect, Connect with SID, Get Context, Disconnect, search, read, search_count, fields_get, read_group, call_method) using env-based config, matching the pattern already used on the v2 line
+
+### Fixed
+
+- `example/.env` is now gitignored, closing a gap where the local example env file (which can hold real credentials) wasn't excluded
+
 ## [1.1.2] - 2026-07-13
 
 ### Fixed
@@ -63,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release with basic Odoo JSON-RPC connection support
 
+[1.1.3]: https://github.com/cqminh/rn-odoo/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/cqminh/rn-odoo/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/cqminh/rn-odoo/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cqminh/rn-odoo/compare/v1.0.1...v1.1.0

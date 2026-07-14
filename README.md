@@ -21,7 +21,7 @@
 
 ---
 
-> 🚀 **rn-odoo v2 is available as an alpha preview.** It targets Odoo's new External JSON-2 API with API key authentication and has breaking changes from v1. Try it with `npm install rn-odoo@next` — see the [`next` branch](https://github.com/cqminh/rn-odoo/tree/next) for docs. Feedback welcome via [GitHub issues](https://github.com/cqminh/rn-odoo/issues/new) or [email](mailto:cqminh.it@gmail.com).
+> 🚀 **rn-odoo v2 is available as an alpha preview.** It targets Odoo's new External JSON-2 API with API key authentication and has breaking changes from v1. Try it with `npm install rn-odoo@next` — see it on [npm](https://www.npmjs.com/package/rn-odoo/v/2.0.0-alpha.1) or the [`next` branch](https://github.com/cqminh/rn-odoo/tree/next) on GitHub for docs. Feedback welcome via [GitHub issues](https://github.com/cqminh/rn-odoo/issues/new) or [email](mailto:cqminh.it@gmail.com).
 
 ---
 
@@ -74,7 +74,7 @@ yarn add rn-odoo
 
 ## 🚀 Usage
 
-> ⚠️ **Important:** This version of `rn-odoo` uses the legacy Odoo JSON-RPC API (`/web/dataset/call_kw`) with session-based authentication. Starting from **Odoo 19**, Odoo introduced the new **External JSON-2 API** (`/json/2`) which uses API key authentication. **v2 is now available as an alpha preview** (`npm install rn-odoo@next`) to support the new API — see the [`next` branch](https://github.com/cqminh/rn-odoo/tree/next). See the [Odoo External API Documentation](https://www.odoo.com/documentation/master/developer/reference/external_api.html) for more details.
+> ⚠️ **Important:** This version of `rn-odoo` uses the legacy Odoo JSON-RPC API (`/web/dataset/call_kw`) with session-based authentication. Starting from **Odoo 19**, Odoo introduced the new **External JSON-2 API** (`/json/2`) which uses API key authentication. **v2 is now available as an alpha preview** (`npm install rn-odoo@next`) to support the new API — see it on [npm](https://www.npmjs.com/package/rn-odoo/v/2.0.0-alpha.1) or the [`next` branch](https://github.com/cqminh/rn-odoo/tree/next) on GitHub. See the [Odoo External API Documentation](https://www.odoo.com/documentation/master/developer/reference/external_api.html) for more details.
 
 > 💡 **Tip:** If you need help with data queries, refer to the [Odoo External API Documentation](https://www.odoo.com/documentation/master/developer/reference/external_api.html).
 
