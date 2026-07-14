@@ -52,6 +52,12 @@ Everything below is staged for the `2.0.0` release, which has not shipped yet.
 - `batch()` no longer posts to a `/json/2/batch` endpoint, which does not exist on real Odoo servers (`404 Not Found`); it now fans out each call as its own `/json/2/<model>/<method>` request via `Promise.all` and collects the results in order
 - `generateApiKey()` now sends `key: this.apiKey` alongside `scope`/`name`/`expiration_date`; Odoo's `res.users.apikeys.generate` requires the caller's current API key as an identity check before minting a new one, and was rejecting the request with `missing a required argument: 'key'`
 
+## [1.1.2] - 2026-07-13
+
+### Fixed
+
+- `connect`, `connectWithSid`, `disconnect`, and `getDatabases` now correctly wrap request bodies in a JSON-RPC 2.0 envelope (`{ jsonrpc, method: 'call', params }`) when calling `_rawRequest`; previously the raw params were sent unwrapped, causing the Odoo server to reject `/web/session/authenticate` with `authenticate() missing 3 required positional arguments: 'db', 'login', and 'password'`
+
 ## [1.1.1] - 2026-06-16
 
 ### Added
@@ -102,7 +108,8 @@ Everything below is staged for the `2.0.0` release, which has not shipped yet.
 
 - Initial release with basic Odoo JSON-RPC connection support
 
-[Unreleased]: https://github.com/cqminh/rn-odoo/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/cqminh/rn-odoo/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/cqminh/rn-odoo/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/cqminh/rn-odoo/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cqminh/rn-odoo/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/cqminh/rn-odoo/compare/v0.1.0...v1.0.1
