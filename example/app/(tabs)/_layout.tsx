@@ -5,6 +5,10 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
+function ServerIcon({ color }: { color: string }) {
+  return <IconSymbol size={28} name="server.rack" color={color} />;
+}
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
@@ -20,9 +24,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Odoo',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="server.rack" color={color} />
-          ),
+          tabBarIcon: ServerIcon,
         }}
       />
       <Tabs.Screen

@@ -1,7 +1,7 @@
 {
   "name": "rn-odoo",
-  "version": "1.1.1",
-  "description": "Easy to connecting React Native and Odoo",
+  "version": "2.0.0",
+  "description": "Easy to connecting React Native and Odoo via JSON-2 API",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
   "exports": {
@@ -21,11 +21,12 @@
     "!**/.*"
   ],
   "scripts": {
-    "example": "yarn workspace rn-odoo-example",
+    "example": "yarn workspace example",
     "test": "jest",
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "clean": "del-cli lib",
+    "prepare": "bob build",
     "prepublishOnly": "bob build",
     "release": "release-it --only-version"
   },
@@ -130,7 +131,8 @@
     "singleQuote": true,
     "tabWidth": 2,
     "trailingComma": "es5",
-    "useTabs": false
+    "useTabs": false,
+    "endOfLine": "auto"
   },
   "react-native-builder-bob": {
     "source": "src",

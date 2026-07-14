@@ -7,9 +7,9 @@ declare const fetch: (
   url: string,
   init?: {
     method?: string;
-    headers?: Record<string, string> | unknown;
+    headers?: Record<string, string> | Headers;
     body?: string;
-    signal?: unknown;
+    signal?: AbortSignal;
   }
 ) => Promise<{
   ok: boolean;
@@ -36,12 +36,17 @@ interface AbortSignal {
   ): void;
 }
 
+interface Headers {
+  forEach(callback: (value: string, key: string) => void): void;
+  get(name: string): string | null;
+}
+
 declare function setTimeout(callback: () => void, ms: number): unknown;
 declare function clearTimeout(handle: unknown): void;
 
 type FetchInit = {
   method?: string;
-  headers?: Record<string, string> | unknown;
+  headers?: Record<string, string> | Headers;
   body?: string;
   signal?: AbortSignal;
 };
@@ -75,20 +80,17 @@ export type OdooEvent = 'connect' | 'disconnect' | 'error';
 export type OdooEventCallback = (data?: unknown) => void;
 
 /**
- * The interface for Odoo configuration.
- * It includes the host URL, database name, username, password, and session ID (sid).
+ * Configuration for the Odoo JSON-2 API client.
  */
 export interface OdooConfig {
+  /** Base URL of the Odoo instance, e.g. https://mycompany.example.com */
   host: string;
+  /** API key used for Bearer authentication. */
+  apiKey: string;
+  /** Optional database name, sent as X-Odoo-Database header. */
   database?: string;
-  username?: string;
-  password?: string;
-  sid?: string;
-  /**
-   * When true (default), the password is cleared from memory after a successful connect.
-   * Set to false if you need to reconnect later without re-entering the password.
-   */
-  clearPasswordAfterConnect?: boolean;
+  /** Optional user-agent string identifying your software. */
+  userAgent?: string;
   /**
    * Request timeout in milliseconds. Defaults to 30000 (30 seconds).
    * Set to 0 to disable the built-in timeout.
@@ -109,41 +111,33 @@ export interface OdooResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: OdooError | string;
-  sid?: string;
   message?: string;
 }
 
 /**
- * Error shape returned by Odoo JSON-RPC.
+ * Error shape returned by the Odoo JSON-2 API.
  */
 export interface OdooError {
+  name: string;
   message: string;
-  code?: number;
-  data?: {
-    name?: string;
-    debug?: string;
-    message?: string;
-    arguments?: unknown[];
-  };
+  arguments?: unknown[];
+  context?: Record<string, unknown>;
+  debug?: string;
 }
 
 /**
- * Type of the raw response returned by Odoo API calls.
+ * Version information returned by /web/version.
  */
-interface OdooResponse<T = unknown> {
-  result?: T;
-  error?: OdooError;
+export interface OdooVersionInfo {
+  version: string;
+  version_info: number[];
 }
 
 /**
- * The interface for request parameters used in Odoo API calls.
- * It includes the model name, method name, and optional arguments and keyword arguments.
+ * Response shape returned by /web/database/list.
  */
-export interface RequestParams {
-  model: string;
-  method: string;
-  args?: unknown[];
-  kwargs?: Record<string, unknown>;
+export interface OdooDatabaseListResponse {
+  result: string[];
 }
 
 /**
@@ -154,35 +148,6 @@ export interface SearchParams {
   offset?: number;
   limit?: number;
   order?: string;
-  fields?: string[];
-}
-
-/**
- * Parameters for custom method calls.
- */
-export interface CallMethodParams {
-  args?: unknown[];
-  kwargs?: Record<string, unknown>;
-  /**
-   * @deprecated Use kwargs instead. These fields are kept for backward compatibility
-   * and will be merged into kwargs.
-   */
-  domain?: unknown[];
-  /**
-   * @deprecated Use kwargs instead.
-   */
-  offset?: number;
-  /**
-   * @deprecated Use kwargs instead.
-   */
-  limit?: number;
-  /**
-   * @deprecated Use kwargs instead.
-   */
-  order?: string;
-  /**
-   * @deprecated Use kwargs instead.
-   */
   fields?: string[];
 }
 
@@ -208,28 +173,52 @@ export interface ReadGroupParams {
 }
 
 /**
- * Data returned after a successful connect.
+ * Parameters for web_search_read operation (returns records + total count).
  */
-export interface ConnectData {
-  uid: number;
-  username: string;
-  user_context: Record<string, unknown>;
-  [key: string]: unknown;
+export interface WebSearchReadParams {
+  domain?: unknown[];
+  /** Field names to fetch (use for simple lists). */
+  fields?: string[];
+  /**
+   * Field specification map for relational fields (Odoo 17+ format).
+   * Example: { name: {}, partner_id: { fields: { name: {} } } }
+   */
+  specification?: Record<string, unknown>;
+  offset?: number;
+  limit?: number;
+  order?: string;
+  /** Cap on the returned `length` value for performance. */
+  count_limit?: number;
 }
 
 /**
- * The Odoo class provides methods to interact with the Odoo API.
- * It allows you to connect to an Odoo instance, perform CRUD operations,
- * search for records, and manage sessions.
+ * Result shape returned by web_search_read.
+ */
+export interface WebSearchReadResult<T = Record<string, unknown>> {
+  records: T[];
+  length: number;
+}
+
+/**
+ * Parameters for custom method calls.
+ */
+export interface CallMethodParams {
+  /** Record IDs for non-@api.model methods. */
+  ids?: number[];
+  /** Named method parameters. */
+  kwargs?: Record<string, unknown>;
+}
+
+/**
+ * The Odoo class provides methods to interact with the Odoo JSON-2 API.
+ * It allows you to perform CRUD operations, search for records, and manage API keys.
  */
 class Odoo {
   host: string;
+  apiKey: string;
   database?: string;
-  username?: string;
-  password?: string;
-  sid?: string;
+  userAgent?: string;
   private context: Record<string, unknown> = {};
-  private clearPasswordAfterConnect: boolean;
   private timeout: number;
   private retry: { count: number; delay: number };
   private requestInterceptors: RequestInterceptor[] = [];
@@ -237,12 +226,10 @@ class Odoo {
   private eventListeners: Map<OdooEvent, Set<OdooEventCallback>> = new Map();
 
   constructor(config: OdooConfig) {
-    this.host = config.host;
+    this.host = config.host.replace(/\/$/, '');
+    this.apiKey = config.apiKey;
     this.database = config.database;
-    this.username = config.username;
-    this.password = config.password;
-    this.sid = config.sid;
-    this.clearPasswordAfterConnect = config.clearPasswordAfterConnect ?? true;
+    this.userAgent = config.userAgent;
     this.timeout = config.timeout ?? 30000;
     this.retry = {
       count: config.retry?.count ?? 0,
@@ -310,71 +297,6 @@ class Odoo {
   }
 
   /**
-   * Retrieves the list of databases available on the Odoo server.
-   * @returns A promise that resolves to an object containing the success status and data or error.
-   */
-  async getDatabases(): Promise<OdooResult<string[]>> {
-    return this._rawRequest<string[]>('/web/database/list', {});
-  }
-
-  /**
-   * Connects to the Odoo instance using the provided credentials.
-   * @returns A promise that resolves to an object containing the success status and data or error.
-   */
-  async connect(): Promise<OdooResult<ConnectData>> {
-    const result = await this._rawRequest<ConnectData>(
-      '/web/session/authenticate',
-      {
-        db: this.database,
-        login: this.username,
-        password: this.password,
-      }
-    );
-
-    if (result.success && result.data) {
-      this.sid = this._setCookieToSessionID(
-        result.headers?.['set-cookie'] ?? null
-      );
-      this.context = result.data.user_context ?? {};
-      this.username = result.data.username;
-
-      if (this.clearPasswordAfterConnect) {
-        this.password = undefined;
-      }
-
-      this._emit('connect', result.data);
-      return { ...result, sid: this.sid };
-    }
-
-    return result;
-  }
-
-  /**
-   * Connects to the Odoo instance using the stored session ID.
-   * @returns A promise that resolves to an object containing the success status and data or error.
-   */
-  async connectWithSid(): Promise<OdooResult<ConnectData>> {
-    const result = await this._rawRequest<ConnectData>(
-      '/web/session/get_session_info',
-      {},
-      {
-        'X-Openerp-Session-Id': this.sid || '',
-      }
-    );
-
-    if (result.success && result.data) {
-      this.sid = this._setCookieToSessionID(
-        result.headers?.['set-cookie'] ?? null
-      );
-      this.context = result.data.user_context ?? {};
-      this.username = result.data.username;
-      this._emit('connect', result.data);
-    }
-
-    return result;
-  }
-
-  /**
    * Returns the current user context merged with the default context.
    * @returns The current context object.
    */
@@ -383,22 +305,103 @@ class Odoo {
   }
 
   /**
+   * Sets the default context used for subsequent API calls.
+   * @param context The context object to merge into the current context.
+   */
+  setContext(context: Record<string, unknown>): void {
+    this.context = { ...this.context, ...context };
+  }
+
+  /**
+   * Retrieves the current user information and context.
+   * This replaces the legacy connect() flow because JSON-2 API uses API keys.
+   * @returns A promise that resolves to the current user context.
+   */
+  async connect(): Promise<OdooResult<Record<string, unknown>>> {
+    const result = await this._json2Request<Record<string, unknown>>(
+      'res.users',
+      'context_get',
+      {}
+    );
+
+    if (result.success && result.data) {
+      if (typeof result.data !== 'object' || Array.isArray(result.data)) {
+        const error = 'Invalid context response from Odoo';
+        this._emit('error', error);
+        return { success: false, error };
+      }
+
+      this.context = result.data;
+      this._emit('connect', result.data);
+    }
+
+    return result;
+  }
+
+  /**
+   * Alias for disconnecting / invalidating the current API key session.
+   * Note: JSON-2 API keys are stateless, so this is a no-op by default.
+   * It emits the disconnect event and clears the local context.
+   * @returns A promise that resolves to a success result.
+   */
+  async disconnect(): Promise<OdooResult<null>> {
+    this.context = {};
+    this._emit('disconnect');
+    return { success: true, data: null, message: 'Disconnected successfully' };
+  }
+
+  /**
+   * Retrieves the Odoo server version information.
+   * Corresponds to the legacy common service version() call.
+   * @returns A promise that resolves to version info.
+   */
+  async getVersion(): Promise<OdooResult<OdooVersionInfo>> {
+    return this._fetch<OdooVersionInfo>('/web/version', undefined, 'GET');
+  }
+
+  /**
+   * Retrieves the list of databases available on the server.
+   * Corresponds to the legacy db service list() call.
+   * @returns A promise that resolves to an array of database names.
+   */
+  async getDatabases(): Promise<OdooResult<string[]>> {
+    const result = await this._fetch<OdooDatabaseListResponse>(
+      '/web/database/list',
+      {},
+      'POST'
+    );
+
+    if (result.success && result.data) {
+      return {
+        success: true,
+        data: result.data.result,
+      };
+    }
+
+    return {
+      success: false,
+      error: result.error ?? 'Failed to retrieve database list',
+    };
+  }
+
+  /**
    * Searches for records in the specified model based on the provided parameters.
    * @param model The name of the model to search in.
    * @param params The search parameters, including the domain.
    * @param context Optional context to be used in the search.
-   * @returns A promise that resolves to an object containing the success status and data or error.
+   * @returns A promise that resolves to an array of record IDs.
    */
   async search(
     model: string,
     params: SearchParams,
     context?: Record<string, unknown>
   ): Promise<OdooResult<number[]>> {
-    return this._request('/web/dataset/call_kw', {
-      model,
-      method: 'search',
-      args: [params.domain],
-      kwargs: { context: { ...this.context, ...context } },
+    return this._json2Request<number[]>(model, 'search', {
+      context: { ...this.context, ...context },
+      domain: params.domain,
+      offset: params.offset,
+      limit: params.limit,
+      order: params.order,
     });
   }
 
@@ -416,30 +419,11 @@ class Odoo {
     fields?: string[],
     context?: Record<string, unknown>
   ): Promise<OdooResult<T[]>> {
-    return this._request('/web/dataset/call_kw', {
-      model,
-      method: 'read',
-      args: fields ? [ids, fields] : [ids],
-      kwargs: { context: { ...this.context, ...context } },
+    return this._json2Request<T[]>(model, 'read', {
+      ids,
+      context: { ...this.context, ...context },
+      fields,
     });
-  }
-
-  /**
-   * Disconnect the current session from the Odoo instance.
-   * @returns A promise that resolves to an object containing the success status and message or error.
-   */
-  async disconnect(): Promise<OdooResult<null>> {
-    const result = await this._rawRequest<null>('/web/session/destroy', {});
-
-    if (result.success) {
-      this.sid = undefined;
-      this.context = {};
-      this.username = undefined;
-      this._emit('disconnect');
-      return { ...result, message: 'Disconnect successfully' };
-    }
-
-    return result;
   }
 
   /**
@@ -447,26 +431,115 @@ class Odoo {
    * @param model The name of the model to search in.
    * @param params The search parameters, including the domain, offset, limit, order, and fields.
    * @param context Optional context to be used in the search.
-   * @returns A promise that resolves to an object containing the success status and data or error.
+   * @returns A promise that resolves to an array of records.
    */
   async search_read<T = Record<string, unknown>>(
     model: string,
     params: SearchParams,
     context?: Record<string, unknown>
   ): Promise<OdooResult<T[]>> {
-    return this._request('/web/dataset/call_kw', {
+    return this._json2Request<T[]>(model, 'search_read', {
+      context: { ...this.context, ...context },
+      domain: params.domain,
+      offset: params.offset,
+      limit: params.limit,
+      order: params.order,
+      fields: params.fields,
+    });
+  }
+
+  /**
+   * Paginated search_read helper. Fetches records page by page until all
+   * matching records are retrieved or the optional maxRecords limit is reached.
+   * @param model The name of the model to search in.
+   * @param params The search parameters. `offset` and `limit` are used as page size.
+   * @param context Optional context.
+   * @returns A promise that resolves to all matching records.
+   */
+  async search_read_paginated<T = Record<string, unknown>>(
+    model: string,
+    params: SearchParams & { maxRecords?: number },
+    context?: Record<string, unknown>
+  ): Promise<OdooResult<T[]>> {
+    const pageSize = params.limit ?? 80;
+    const maxRecords = params.maxRecords;
+    const allRecords: T[] = [];
+    let offset = params.offset ?? 0;
+
+    while (true) {
+      const fetchLimit =
+        maxRecords !== undefined
+          ? Math.min(pageSize, maxRecords - allRecords.length)
+          : pageSize;
+
+      const result = await this.search_read<T>(
+        model,
+        { ...params, limit: fetchLimit, offset },
+        context
+      );
+
+      if (!result.success) {
+        return result;
+      }
+
+      const records = result.data ?? [];
+      if (records.length === 0) {
+        break;
+      }
+
+      allRecords.push(...records);
+      if (maxRecords !== undefined && allRecords.length > maxRecords) {
+        allRecords.splice(maxRecords);
+      }
+
+      if (records.length < fetchLimit) {
+        break;
+      }
+
+      if (maxRecords !== undefined && allRecords.length >= maxRecords) {
+        break;
+      }
+
+      offset += fetchLimit;
+    }
+
+    return { success: true, data: allRecords };
+  }
+
+  /**
+   * Searches and reads records, also returning the total count of matching records.
+   * Useful for paginated UIs that need both the page data and the total row count
+   * without issuing a separate search_count call.
+   * @param model The name of the model to search in.
+   * @param params Search parameters. Use `fields` for simple lists or `specification`
+   *   for relational field nesting (Odoo 17+ format).
+   * @param context Optional context.
+   * @returns A promise that resolves to `{ records, length }`.
+   */
+  async web_search_read<T = Record<string, unknown>>(
+    model: string,
+    params: WebSearchReadParams,
+    context?: Record<string, unknown>
+  ): Promise<OdooResult<WebSearchReadResult<T>>> {
+    // Odoo's web_search_read always requires `specification`; derive one from
+    // `fields` when the caller only passed a flat field list.
+    const specification =
+      params.specification ??
+      Object.fromEntries((params.fields ?? []).map((field) => [field, {}]));
+
+    return this._json2Request<WebSearchReadResult<T>>(
       model,
-      method: 'search_read',
-      args: [],
-      kwargs: {
+      'web_search_read',
+      {
         context: { ...this.context, ...context },
         domain: params.domain,
+        specification,
         offset: params.offset,
         limit: params.limit,
         order: params.order,
-        fields: params.fields,
-      },
-    });
+        count_limit: params.count_limit,
+      }
+    );
   }
 
   /**
@@ -479,13 +552,13 @@ class Odoo {
   async search_count(
     model: string,
     domain: unknown[],
+    limit?: number,
     context?: Record<string, unknown>
   ): Promise<OdooResult<number>> {
-    return this._request('/web/dataset/call_kw', {
-      model,
-      method: 'search_count',
-      args: [domain],
-      kwargs: { context: { ...this.context, ...context } },
+    return this._json2Request<number>(model, 'search_count', {
+      context: { ...this.context, ...context },
+      domain,
+      limit,
     });
   }
 
@@ -501,11 +574,11 @@ class Odoo {
     params?: FieldsGetParams,
     context?: Record<string, unknown>
   ): Promise<OdooResult<T>> {
-    return this._request('/web/dataset/call_kw', {
-      model,
-      method: 'fields_get',
-      args: [params?.fields, params?.attributes],
-      kwargs: { context: { ...this.context, ...context } },
+    return this._json2Request<T>(model, 'fields_get', {
+      context: { ...this.context, ...context },
+      // Odoo's fields_get ORM method takes `allfields`, not `fields`.
+      allfields: params?.fields,
+      attributes: params?.attributes,
     });
   }
 
@@ -521,20 +594,15 @@ class Odoo {
     params: ReadGroupParams,
     context?: Record<string, unknown>
   ): Promise<OdooResult<T[]>> {
-    return this._request('/web/dataset/call_kw', {
-      model,
-      method: 'read_group',
-      args: [],
-      kwargs: {
-        context: { ...this.context, ...context },
-        domain: params.domain,
-        fields: params.fields,
-        groupby: params.groupby,
-        offset: params.offset,
-        limit: params.limit,
-        orderby: params.orderby,
-        lazy: params.lazy,
-      },
+    return this._json2Request<T[]>(model, 'read_group', {
+      context: { ...this.context, ...context },
+      domain: params.domain,
+      fields: params.fields,
+      groupby: params.groupby,
+      offset: params.offset,
+      limit: params.limit,
+      orderby: params.orderby,
+      lazy: params.lazy,
     });
   }
 
@@ -543,18 +611,16 @@ class Odoo {
    * @param model The name of the model to create a record in.
    * @param params The parameters for the new record.
    * @param context Optional context to be used in the creation.
-   * @returns A promise that resolves to the created record's data or an error.
+   * @returns A promise that resolves to the created record's ID or an error.
    */
   async create<T = number>(
     model: string,
     params: Record<string, unknown>,
     context?: Record<string, unknown>
   ): Promise<OdooResult<T>> {
-    return this._request('/web/dataset/call_kw', {
-      model,
-      method: 'create',
-      args: [params],
-      kwargs: { context: { ...this.context, ...context } },
+    return this._json2Request<T>(model, 'create', {
+      ...params,
+      context: { ...this.context, ...context },
     });
   }
 
@@ -572,11 +638,10 @@ class Odoo {
     params: Record<string, unknown>,
     context?: Record<string, unknown>
   ): Promise<OdooResult<boolean>> {
-    return this._request('/web/dataset/call_kw', {
-      model,
-      method: 'write',
-      args: [ids, params],
-      kwargs: { context: { ...this.context, ...context } },
+    return this._json2Request<boolean>(model, 'write', {
+      ...params,
+      ids,
+      context: { ...this.context, ...context },
     });
   }
 
@@ -592,11 +657,9 @@ class Odoo {
     ids: number[],
     context?: Record<string, unknown>
   ): Promise<OdooResult<boolean>> {
-    return this._request('/web/dataset/call_kw', {
-      model,
-      method: 'unlink',
-      args: [ids],
-      kwargs: { context: { ...this.context, ...context } },
+    return this._json2Request<boolean>(model, 'unlink', {
+      ids,
+      context: { ...this.context, ...context },
     });
   }
 
@@ -604,7 +667,7 @@ class Odoo {
    * Calls a method on the specified model with the provided parameters.
    * @param model The name of the model to call the method on.
    * @param method The name of the method to call.
-   * @param params The parameters for the method call, including args and kwargs.
+   * @param params The parameters for the method call, including ids and kwargs.
    * @param context Optional context to be used in the method call.
    * @returns A promise that resolves to the result of the method call or an error.
    */
@@ -614,57 +677,114 @@ class Odoo {
     params: CallMethodParams,
     context?: Record<string, unknown>
   ): Promise<OdooResult<T>> {
-    const legacyKwargs: Record<string, unknown> = {};
-    if (params.domain !== undefined) legacyKwargs.domain = params.domain;
-    if (params.offset !== undefined) legacyKwargs.offset = params.offset;
-    if (params.limit !== undefined) legacyKwargs.limit = params.limit;
-    if (params.order !== undefined) legacyKwargs.order = params.order;
-    if (params.fields !== undefined) legacyKwargs.fields = params.fields;
+    const kwargs = params.kwargs ?? {};
+    const kwargsContext =
+      typeof kwargs.context === 'object'
+        ? (kwargs.context as Record<string, unknown>)
+        : {};
+    const remainingKwargs: Record<string, unknown> = {};
+    for (const key of Object.keys(kwargs)) {
+      if (key !== 'context') {
+        remainingKwargs[key] = kwargs[key];
+      }
+    }
 
-    return this._request('/web/dataset/call_kw', {
-      model,
-      method: method,
-      args: params.args || [],
-      kwargs: {
-        context: { ...this.context, ...context },
-        ...legacyKwargs,
-        ...params.kwargs,
-      },
+    return this._json2Request<T>(model, method, {
+      ids: params.ids,
+      context: { ...this.context, ...kwargsContext, ...context },
+      ...remainingKwargs,
     });
   }
 
   /**
-   * Makes a JSON-RPC request to the Odoo dataset endpoint.
-   * @param path The API endpoint path.
-   * @param params The request parameters.
-   * @returns A promise that resolves to the response data or an error.
+   * Sends multiple JSON-2 calls concurrently and collects their results in
+   * order. Odoo's JSON-2 API has no server-side batch endpoint, so this
+   * issues one HTTP request per call (via `Promise.all`) rather than a
+   * single round trip.
+   * @param calls An array of batch call descriptors.
+   * @returns A promise that resolves to an array of each call's raw result.
+   *   Fails with the first encountered error if any call fails.
    */
-  protected async _request<T = unknown>(
-    path: string,
-    params: RequestParams
+  async batch<T extends unknown[] = unknown[]>(
+    calls: { model: string; method: string; params?: Record<string, unknown> }[]
   ): Promise<OdooResult<T>> {
-    return this._fetch<T>(path, {
-      jsonrpc: '2.0',
-      id: Math.random().toString(36).slice(2) + Date.now().toString(36),
-      method: 'call',
-      params,
+    const results = await Promise.all(
+      calls.map((call) =>
+        this._json2Request(call.model, call.method, {
+          context: this.context,
+          ...(call.params ?? {}),
+        })
+      )
+    );
+
+    const failed = results.find((result) => !result.success);
+    if (failed) {
+      return { success: false, error: failed.error };
+    }
+
+    return { success: true, data: results.map((result) => result.data) as T };
+  }
+
+  /**
+   * Generates a new API key programmatically.
+   * Requires the calling key to have permission to generate API keys.
+   * Odoo requires the current key to be re-submitted as an identity check
+   * before minting a new one.
+   * @param params Parameters for key generation.
+   * @returns A promise that resolves to the new API key string.
+   */
+  async generateApiKey(params: {
+    scope?: string | null;
+    name: string;
+    expiration_date?: string;
+  }): Promise<OdooResult<string>> {
+    return this._json2Request<string>('res.users.apikeys', 'generate', {
+      key: this.apiKey,
+      scope: params.scope ?? null,
+      name: params.name,
+      expiration_date: params.expiration_date,
     });
   }
 
   /**
-   * Makes a raw JSON request to a non JSON-RPC endpoint.
-   * @param path The API endpoint path.
-   * @param body The raw request body.
-   * @param extraHeaders Additional headers to include.
+   * Revokes an API key programmatically.
+   * @param key The API key to revoke. Defaults to the current key.
+   * @returns A promise that resolves to a success result.
+   */
+  async revokeApiKey(key?: string): Promise<OdooResult<null>> {
+    return this._json2Request<null>('res.users.apikeys', 'revoke', {
+      key: key ?? this.apiKey,
+    });
+  }
+
+  /**
+   * Makes a request to the Odoo JSON-2 API endpoint.
+   * @param model The model name.
+   * @param method The method name.
+   * @param body The request body.
    * @returns A promise that resolves to the response data or an error.
    */
-  protected async _rawRequest<T = unknown>(
-    path: string,
-    body: Record<string, unknown>,
-    extraHeaders?: Record<string, string>
-  ): Promise<OdooResult<T> & { headers?: Record<string, string> }> {
-    const result = await this._fetch<T>(path, body, extraHeaders);
-    return result;
+  protected async _json2Request<T = unknown>(
+    model: string,
+    method: string,
+    body: Record<string, unknown>
+  ): Promise<OdooResult<T>> {
+    const path = `/json/2/${model}/${method}`;
+    const cleanedBody = this._cleanBody(body);
+    return this._fetch<T>(path, cleanedBody);
+  }
+
+  /**
+   * Removes undefined values from the request body.
+   */
+  private _cleanBody(body: Record<string, unknown>): Record<string, unknown> {
+    const cleaned: Record<string, unknown> = {};
+    for (const key of Object.keys(body)) {
+      if (body[key] !== undefined) {
+        cleaned[key] = body[key];
+      }
+    }
+    return cleaned;
   }
 
   /**
@@ -673,35 +793,60 @@ class Odoo {
    */
   private async _fetch<T = unknown>(
     path: string,
-    body: unknown,
-    extraHeaders?: Record<string, string>
-  ): Promise<OdooResult<T> & { headers?: Record<string, string> }> {
-    let lastError:
-      | (OdooResult<T> & { headers?: Record<string, string> })
-      | undefined;
+    body?: Record<string, unknown>,
+    method: 'GET' | 'POST' = 'POST'
+  ): Promise<OdooResult<T>> {
+    let result: OdooResult<T> = { success: false };
 
     for (let attempt = 0; attempt <= this.retry.count; attempt++) {
-      const result = await this._fetchOnce<T>(path, body, extraHeaders);
+      result = await this._fetchOnce<T>(path, body, method);
 
       if (result.success) {
         return result;
       }
 
-      const isAbortError =
-        typeof result.error === 'string' && /aborted/i.test(result.error);
-
-      if (isAbortError || attempt === this.retry.count) {
+      if (!this._shouldRetry(result.error) || attempt === this.retry.count) {
+        this._emit('error', result.error);
         return result;
       }
-
-      lastError = result;
 
       if (this.retry.delay > 0) {
         await this._sleep(this.retry.delay);
       }
     }
 
-    return lastError!;
+    return result;
+  }
+
+  /**
+   * Determines whether a failed request should be retried.
+   * Aborted requests and client errors (4xx) are not retried.
+   * Only network errors and server errors (5xx) are retried.
+   */
+  private _shouldRetry(error: OdooError | string | undefined): boolean {
+    if (typeof error === 'string') {
+      // HTTP 4xx errors and abort/timeout should not be retried.
+      if (/aborted|timeout/i.test(error)) {
+        return false;
+      }
+      if (/^HTTP\s+4\d{2}/i.test(error)) {
+        return false;
+      }
+      return true;
+    }
+
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      typeof error.name === 'string'
+    ) {
+      return !/Unauthorized|Forbidden|BadRequest|NotFound|Unprocessable/i.test(
+        error.name
+      );
+    }
+
+    return true;
   }
 
   /**
@@ -709,19 +854,31 @@ class Odoo {
    */
   private async _fetchOnce<T = unknown>(
     path: string,
-    body: unknown,
-    extraHeaders?: Record<string, string>
-  ): Promise<OdooResult<T> & { headers?: Record<string, string> }> {
+    body?: Record<string, unknown>,
+    method: 'GET' | 'POST' = 'POST'
+  ): Promise<OdooResult<T>> {
     let url = `${this.host}${path}`;
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      Authorization: `bearer ${this.apiKey}`,
+    };
+
+    if (method === 'POST') {
+      headers['Content-Type'] = 'application/json; charset=utf-8';
+    }
+
+    if (this.database) {
+      headers['X-Odoo-Database'] = this.database;
+    }
+
+    if (this.userAgent) {
+      headers['User-Agent'] = this.userAgent;
+    }
+
     let init: FetchInit = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Openerp-Session-Id': this.sid || '',
-        ...extraHeaders,
-      },
-      body: JSON.stringify(body),
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     };
 
     for (const interceptor of this.requestInterceptors) {
@@ -753,94 +910,86 @@ class Odoo {
 
     try {
       const response = await fetch(url, init);
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-
-      const responseHeaders: Record<string, string> = {};
-      if (typeof response.headers?.forEach === 'function') {
-        response.headers.forEach((value: string, key: string) => {
-          responseHeaders[key] = value;
-        });
-      } else if (typeof response.headers?.get === 'function') {
-        const setCookie = response.headers.get('set-cookie');
-        if (setCookie) {
-          responseHeaders['set-cookie'] = setCookie;
-        }
-      } else if (response.headers) {
-        Object.assign(responseHeaders, response.headers);
-      }
 
       if (!response.ok) {
-        const errorResult: OdooResult<T> & {
-          headers?: Record<string, string>;
-        } = {
-          success: false,
-          error: `HTTP ${response.status}: ${response.statusText}`,
-          headers: responseHeaders,
-        };
-        this._emit('error', errorResult.error);
-        return errorResult;
+        const errorJson = await this._safeParseJson(response);
+        const error: OdooError | string =
+          errorJson && this._isOdooError(errorJson)
+            ? (errorJson as OdooError)
+            : `HTTP ${response.status}: ${response.statusText}`;
+        return { success: false, error };
       }
 
-      const responseJson = (await response.json()) as OdooResponse<T>;
-      if (responseJson.error) {
-        const errorResult: OdooResult<T> & {
-          headers?: Record<string, string>;
-        } = {
-          success: false,
-          error: responseJson.error,
-          headers: responseHeaders,
-        };
-        this._emit('error', responseJson.error);
-        return errorResult;
+      const responseJson = (await response.json()) as T;
+
+      if (this._isOdooError(responseJson)) {
+        return { success: false, error: responseJson as OdooError };
       }
 
-      let result: OdooResult<T> & { headers?: Record<string, string> } = {
+      let result: OdooResult<T> = {
         success: true,
-        data: responseJson.result,
-        headers: responseHeaders,
+        data: responseJson,
       };
 
       for (const interceptor of this.responseInterceptors) {
         const modified = await interceptor(result);
         if (modified) {
-          result = modified as OdooResult<T> & {
-            headers?: Record<string, string>;
-          };
+          result = modified as OdooResult<T>;
         }
       }
 
       return result;
     } catch (error) {
-      const errorResult: OdooResult<T> & { headers?: Record<string, string> } =
-        {
-          success: false,
-          error: this._formatError(error),
-        };
-      this._emit('error', errorResult.error);
-      return errorResult;
+      return {
+        success: false,
+        error: this._formatError(error),
+      };
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
     }
+  }
+
+  /**
+   * Safely parses a JSON response, returning null on failure.
+   */
+  private async _safeParseJson(response: {
+    json: () => Promise<unknown>;
+  }): Promise<unknown | null> {
+    try {
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Checks whether a parsed JSON object matches the Odoo JSON-2 error shape.
+   */
+  private _isOdooError(value: unknown): value is OdooError {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      'name' in value &&
+      typeof (value as Record<string, unknown>).name === 'string' &&
+      'message' in value &&
+      typeof (value as Record<string, unknown>).message === 'string'
+    );
   }
 
   /**
    * Waits for the specified number of milliseconds.
    */
-  private _sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Extracts the session ID from the 'set-cookie' header.
-   * @param setCookie The 'set-cookie' header value.
-   * @returns The session ID if found, otherwise an empty string.
-   */
-  private _setCookieToSessionID(setCookie: string | null): string {
-    if (setCookie && setCookie.includes('session_id')) {
-      const match = setCookie.match(/session_id=([^;]+)/);
-      return match?.[1] ?? '';
+  private async _sleep(ms: number): Promise<void> {
+    let id: unknown;
+    try {
+      await new Promise<void>((resolve) => {
+        id = setTimeout(resolve, ms);
+      });
+    } finally {
+      clearTimeout(id);
     }
-    return '';
   }
 
   /**
@@ -859,4 +1008,5 @@ class Odoo {
   }
 }
 
+export { Odoo };
 export default Odoo;
