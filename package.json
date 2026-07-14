@@ -1,6 +1,6 @@
 {
   "name": "rn-odoo",
-  "version": "2.0.0",
+  "version": "2.0.0-alpha.1",
   "description": "Easy to connecting React Native and Odoo via JSON-2 API",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
