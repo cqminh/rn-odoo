@@ -22,6 +22,8 @@
 ---
 
 > 🚀 **rn-odoo v2 đã có bản trải nghiệm alpha.** Phiên bản này dùng **External JSON-2 API** mới của Odoo với xác thực bằng API key, và có một số thay đổi phá vỡ tương thích (breaking changes) so với v1. Dùng thử bằng `npm install rn-odoo@next` — xem trên [npm](https://www.npmjs.com/package/rn-odoo/v/2.0.0-alpha.1) hoặc [nhánh `next`](https://github.com/cqminh/rn-odoo/tree/next) trên GitHub. Góp ý qua [GitHub issues](https://github.com/cqminh/rn-odoo/issues/new) hoặc [email](mailto:cqminh.it@gmail.com).
+>
+> 📅 **Kể từ ngày 01/08/2026, tag `latest` trên npm sẽ chuyển sang v2 (2.0.0).** Nếu bạn đang dùng v1, hãy ghim cài đặt bằng `npm install rn-odoo@v1` — v1 vẫn tiếp tục nhận bản vá dưới tag này.
 
 ---
 

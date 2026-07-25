@@ -22,6 +22,8 @@
 ---
 
 > 🚀 **rn-odoo v2 is available as an alpha preview.** It targets Odoo's new External JSON-2 API with API key authentication and has breaking changes from v1. Try it with `npm install rn-odoo@next` — see it on [npm](https://www.npmjs.com/package/rn-odoo/v/2.0.0-alpha.1) or the [`next` branch](https://github.com/cqminh/rn-odoo/tree/next) on GitHub for docs. Feedback welcome via [GitHub issues](https://github.com/cqminh/rn-odoo/issues/new) or [email](mailto:cqminh.it@gmail.com).
+>
+> 📅 **Starting August 1, 2026, the `latest` npm tag will switch to v2 (2.0.0).** If you depend on v1, pin your install to `npm install rn-odoo@v1` — v1 will keep receiving fixes under that tag.
 
 ---
 
