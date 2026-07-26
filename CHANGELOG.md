@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2026-07-25
+
+No functional or API changes — this release exists as a version marker ahead of the `latest` npm tag switching to v2 (2.0.0) on 2026-08-01.
+
+### Security
+
+- Pinned `brace-expansion`, `js-yaml`, `postcss`, and `@conventional-changelog/git-client` to patched versions via `resolutions`, closing several Dependabot-flagged vulnerabilities (including a brace-expansion DoS via unbounded expansion length)
+
+### Changed
+
+- README and Vietnamese docs updated to announce the `latest` npm tag switching to v2 (2.0.0) on 2026-08-01, with instructions to pin `npm install rn-odoo@v1` for continued v1.x updates
+
 ## [1.1.3] - 2026-07-14
 
 ### Changed
