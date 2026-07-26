@@ -21,7 +21,7 @@
 
 ---
 
-> 🚧 **Đây là nhánh `next` (v2 alpha).** Có thể sẽ còn thay đổi phá vỡ tương thích (breaking changes) trước khi ra bản `2.0.0` chính thức — cài bằng `npm install rn-odoo@next`. Nếu bạn muốn góp ý hay cần cải thiện gì, hãy [tạo issue trên GitHub](https://github.com/cqminh/rn-odoo/issues/new) hoặc gửi email tới [cqminh.it@gmail.com](mailto:cqminh.it@gmail.com).
+> ℹ️ **Đây là bản ổn định hiện tại (v2)**, hướng tới External JSON-2 API của Odoo. Vẫn đang dùng JSON-RPC API cũ? Cài nhánh v1.x bằng `npm install rn-odoo@v1` — xem [README](https://github.com/cqminh/rn-odoo/tree/v1#readme) của nhánh đó.
 
 ---
 
@@ -65,13 +65,13 @@
 ## 📦 Cài đặt
 
 ```bash
-npm install rn-odoo@next
+npm install rn-odoo
 # hoặc
-yarn add rn-odoo@next
+yarn add rn-odoo
 ```
 
 > ⚠️ **Lưu ý quan trọng:**
-> rn-odoo@2.x chỉ hỗ trợ **Odoo External JSON-2 API**. Nếu bạn cần API JSON-RPC cũ (`/web/dataset/call_kw`), hãy tiếp tục dùng rn-odoo@1.x.
+> rn-odoo@2.x chỉ hỗ trợ **Odoo External JSON-2 API**. Nếu bạn cần API JSON-RPC cũ (`/web/dataset/call_kw`), hãy cài `rn-odoo@v1` thay vào đó.
 
 ---
 

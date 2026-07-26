@@ -21,7 +21,7 @@
 
 ---
 
-> 🚧 **This is the `next` (v2 alpha) line.** Breaking changes are expected before the stable `2.0.0` release — install with `npm install rn-odoo@next`. If you'd like something improved, [open a GitHub issue](https://github.com/cqminh/rn-odoo/issues/new) or email [cqminh.it@gmail.com](mailto:cqminh.it@gmail.com).
+> ℹ️ **This is the current stable release (v2)**, targeting Odoo's External JSON-2 API. Still on the legacy JSON-RPC API? Install the v1.x line with `npm install rn-odoo@v1` — see its [README](https://github.com/cqminh/rn-odoo/tree/v1#readme).
 
 ---
 
@@ -65,13 +65,13 @@
 ## 📦 Installation
 
 ```bash
-npm install rn-odoo@next
+npm install rn-odoo
 # or
-yarn add rn-odoo@next
+yarn add rn-odoo
 ```
 
 > ⚠️ **Breaking change:**
-> rn-odoo@2.x only supports the **Odoo External JSON-2 API**. If you need the legacy JSON-RPC API (`/web/dataset/call_kw`), stay on rn-odoo@1.x.
+> rn-odoo@2.x only supports the **Odoo External JSON-2 API**. If you need the legacy JSON-RPC API (`/web/dataset/call_kw`), install `rn-odoo@v1` instead.
 
 ---
 
