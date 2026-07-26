@@ -65,16 +65,16 @@
 ## 📦 Cài đặt
 
 ```bash
-npm install rn-odoo
+npm install rn-odoo@v1
 # hoặc
-yarn add rn-odoo
+yarn add rn-odoo@v1
 ```
 
 ---
 
 ## 🚀 Cách sử dụng
 
-> ⚠️ **Lưu ý quan trọng:** Phiên bản này của `rn-odoo` đang sử dụng JSON-RPC API cũ (`/web/dataset/call_kw`) với xác thực dựa trên session. Từ **Odoo 19**, Odoo đã giới thiệu **External JSON-2 API** mới (`/json/2`) với xác thực bằng API key. **v2 đã có bản alpha** (`npm install rn-odoo@next`) để hỗ trợ API mới — xem trên [npm](https://www.npmjs.com/package/rn-odoo/v/2.0.0-alpha.1) hoặc [nhánh `next`](https://github.com/cqminh/rn-odoo/tree/next) trên GitHub. Xem thêm tại [Tài liệu API bên ngoài của Odoo](https://www.odoo.com/documentation/master/developer/reference/external_api.html).
+> ⚠️ **Lưu ý quan trọng:** Phiên bản này của `rn-odoo` đang sử dụng JSON-RPC API cũ (`/web/dataset/call_kw`) với xác thực dựa trên session. Từ **Odoo 19**, Odoo đã giới thiệu **External JSON-2 API** mới (`/json/2`) với xác thực bằng API key, và đây cũng là API mà bản `latest` hiện tại (v2) hướng tới. Nếu server của bạn dùng Odoo 19 trở lên, hãy dùng `npm install rn-odoo` (v2) thay vì bản này. Xem thêm tại [Tài liệu API bên ngoài của Odoo](https://www.odoo.com/documentation/master/developer/reference/external_api.html).
 
 > 💡 **Gợi ý:** Nếu bạn cần hỗ trợ về cấu trúc truy vấn dữ liệu, hãy tham khảo [Tài liệu API bên ngoài của Odoo](https://www.odoo.com/documentation/master/developer/reference/external_api.html).
 
