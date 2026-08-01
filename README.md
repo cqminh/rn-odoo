@@ -21,7 +21,7 @@
 
 ---
 
-> ℹ️ **This is the v1.x maintenance line.** It's published under the npm `v1` dist-tag — install it with `npm install rn-odoo@v1`. For the current stable release (v2, targeting Odoo's External JSON-2 API), see the `latest` tag.
+> ℹ️ **This is the v1.x maintenance line.** It's published under the npm `v1-legacy` dist-tag — install it with `npm install rn-odoo@v1-legacy`. For the current stable release (v2, targeting Odoo's External JSON-2 API), see the `latest` tag.
 
 ---
 
@@ -65,9 +65,9 @@
 ## 📦 Installation
 
 ```bash
-npm install rn-odoo@v1
+npm install rn-odoo@v1-legacy
 # or
-yarn add rn-odoo@v1
+yarn add rn-odoo@v1-legacy
 ```
 
 ---

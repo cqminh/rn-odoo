@@ -21,7 +21,7 @@
 
 ---
 
-> ℹ️ **Đây là nhánh bảo trì v1.x.** Bản này được publish dưới npm dist-tag `v1` — cài đặt bằng `npm install rn-odoo@v1`. Để dùng bản ổn định hiện tại (v2, hướng tới External JSON-2 API của Odoo), xem tag `latest`.
+> ℹ️ **Đây là nhánh bảo trì v1.x.** Bản này được publish dưới npm dist-tag `v1-legacy` — cài đặt bằng `npm install rn-odoo@v1-legacy`. Để dùng bản ổn định hiện tại (v2, hướng tới External JSON-2 API của Odoo), xem tag `latest`.
 
 ---
 
@@ -65,9 +65,9 @@
 ## 📦 Cài đặt
 
 ```bash
-npm install rn-odoo@v1
+npm install rn-odoo@v1-legacy
 # hoặc
-yarn add rn-odoo@v1
+yarn add rn-odoo@v1-legacy
 ```
 
 ---
