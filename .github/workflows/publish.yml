@@ -28,4 +28,4 @@ jobs:
 
       - run: yarn prepublishOnly
 
-      - run: npm publish --tag ${{ contains(github.ref_name, '-') && 'next' || (startsWith(github.ref_name, 'v1.') && 'v1' || 'latest') }} --access public --provenance
+      - run: npm publish --tag ${{ contains(github.ref_name, '-') && 'next' || (startsWith(github.ref_name, 'v1.') && 'v1-legacy' || 'latest') }} --access public --provenance
