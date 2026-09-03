@@ -101,7 +101,9 @@
     "js-yaml@^4.1.0": "4.3.0",
     "js-yaml@^4.1.1": "4.3.0",
     "postcss": "8.5.23",
-    "@conventional-changelog/git-client@^1.0.0": "2.7.0"
+    "@conventional-changelog/git-client@^1.0.0": "2.7.0",
+    "decode-uri-component": "^0.5.0",
+    "@xmldom/xmldom@^0.9.10": "0.9.12"
   },
   "jest": {
     "preset": "react-native",
